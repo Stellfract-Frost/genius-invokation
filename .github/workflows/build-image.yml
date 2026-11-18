@@ -1,0 +1,95 @@
+# 构建联机服镜像并推送到 GHCR
+# 放置位置：fork 仓库根目录 .github/workflows/build-image.yml
+# 用途：在 GitHub 免费 runner（4 vCPU / 16 GB）上完成 pnpm install + 全量构建，
+#       服务器只负责 docker pull，避免 2 GB 内存机器 OOM。
+
+name: Build server image
+
+on:
+  # fork 里手动触发（推荐：每次同步上游后手动点一次）
+  workflow_dispatch:
+  # 同步上游 / 自己改代码后自动构建
+  push:
+    branches: [main]
+    # 文档类改动不触发构建，省时间
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+
+permissions:
+  contents: read
+  packages: write # 推送 GHCR 必需
+
+# 同一分支不并发构建，避免重复占用 runner 和缓存配额
+concurrency:
+  group: build-image-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # 首次构建约 25~50 分钟，留足余量防止误杀
+    timeout-minutes: 120
+
+    steps:
+      # 免费 runner 根分区约 14 GB，这个 monorepo 的 node_modules 很大，
+      # 先清掉用不到的大目录，避免 "no space left on device"
+      - name: Free disk space
+        continue-on-error: true
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          df -h /
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 直接用 buildx 命令行构建：镜像名在 shell 里统一转小写，
+      # 不依赖表达式上下文，也不额外引入第三方 action。
+      - name: Build and push
+        run: |
+          set -euo pipefail
+
+          # GHCR 镜像名必须全小写，github.repository 可能含大写（如 Fork 名）
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          echo "IMAGE=$IMAGE"         >> "$GITHUB_ENV"
+          echo "SHORT_SHA=$SHORT_SHA" >> "$GITHUB_ENV"
+
+          docker buildx build \
+            --file packages/server/Dockerfile \
+            --platform linux/amd64 \
+            --pull \
+            --push \
+            --provenance=false \
+            --tag "$IMAGE:latest" \
+            --tag "$IMAGE:sha-$SHORT_SHA" \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --label "org.opencontainers.image.licenses=AGPL-3.0-or-later" \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
+            .
+
+      - name: Summary
+        run: |
+          {
+            echo "### 镜像已推送"
+            echo ""
+            echo '```'
+            echo "${IMAGE}:latest"
+            echo "${IMAGE}:sha-${SHORT_SHA}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
