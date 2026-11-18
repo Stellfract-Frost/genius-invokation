@@ -1,0 +1,54 @@
+# Nginx 反代示例（HTTPS + SSE 长连接）
+# 关键点：房间通知走 Server-Sent Events，不是 WebSocket。
+#        服务端已自带 X-Accel-Buffering: no，这里再显式关缓冲 + 放宽读超时更稳。
+
+server {
+    listen 80;
+    server_name tcg.example.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name tcg.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/tcg.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/tcg.example.com/privkey.pem;
+
+    # 服务端 bodyLimit 为 1 MB，这里留一点余量
+    client_max_body_size 4m;
+
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+    gzip_min_length 1024;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # 万一将来加 WebSocket 也不用改配置
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        "";
+
+        # SSE 必需：不缓冲、不缓存、长超时
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+}
+
+# ------------------------------------------------------------
+# Caddy 更省事（自动申请证书），等价配置：
+#
+# tcg.example.com {
+#     reverse_proxy 127.0.0.1:3000 {
+#         flush_interval -1   # 关闭缓冲，SSE 才能实时推送
+#     }
+# }
+# ------------------------------------------------------------

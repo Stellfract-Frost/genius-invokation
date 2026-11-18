@@ -1,0 +1,93 @@
+# 生产环境 compose —— 拉取 GHCR 镜像，不在服务器上构建
+# 与官方 packages/server/compose.yaml 的差异（都是必要的）：
+#   1) 去掉 build:，image 改为 GHCR 完整名；pull_policy: never -> always
+#   2) 补上 server 的 ports 映射（官方 compose 没有，默认外部访问不到）
+#   3) 补上 db 的 pgdata 卷挂载（官方只声明卷不挂载，容器重建即丢库）
+#   4) 加 restart / healthcheck / 内存上限，适配 2C2G
+#
+# 用法：docker compose -f compose.prod.yaml up -d
+
+name: genius-invokation
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 未设置}"
+    # 2 GB 内存机器按小规格收敛，避免与 node 抢内存
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - effective_cache_size=512MB
+      - -c
+      - max_connections=50
+      - -c
+      - work_mem=4MB
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    # 不映射端口：数据库只在 compose 内网可达
+
+  migrate:
+    image: "${SERVER_IMAGE:?SERVER_IMAGE 未设置}"
+    pull_policy: always
+    restart: "no"
+    environment:
+      DATABASE_URL: "postgres://postgres:${POSTGRES_PASSWORD}@db:5432/postgres"
+      NODE_OPTIONS: "--max-old-space-size=512"
+    # 与官方一致：镜像默认 CMD 是起服务，这里改成跑 drizzle 迁移
+    command: ["node", "scripts/migrate.ts"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  server:
+    image: "${SERVER_IMAGE:?SERVER_IMAGE 未设置}"
+    pull_policy: always
+    restart: unless-stopped
+    # 只绑本机回环，由 Nginx / Caddy 反代对外；如需直连改成 "3000:3000"
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: "postgres://postgres:${POSTGRES_PASSWORD}@db:5432/postgres"
+      JWT_SECRET: "${JWT_SECRET:?JWT_SECRET 未设置}"
+      # 以下留空即关闭对应功能，compose 不会因为空值报错
+      GH_CLIENT_ID: "${GH_CLIENT_ID:-}"
+      GH_CLIENT_SECRET: "${GH_CLIENT_SECRET:-}"
+      # 服务器访问 github.com 不稳时，可指向自建反代（见 README 第 8 节）
+      GH_CODE_EXCHANGE_URL: "${GH_CODE_EXCHANGE_URL:-}"
+      GH_GET_USER_API_URL: "${GH_GET_USER_API_URL:-}"
+      DEBUG_LOG_RECEIVE_URL: "${DEBUG_LOG_RECEIVE_URL:-}"
+      # 不设 REDIS_URL = 不启用 Redis（单机小规模不需要）
+      # REDIS_URL: "redis://redis:6379"
+      NODE_OPTIONS: "--max-old-space-size=1024"
+    # 服务端收到 SIGTERM 会等待进行中的房间收尾，给足时间
+    stop_grace_period: 30s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+    healthcheck:
+      # 镜像内没有 curl，用 node 自带 fetch 探 /api/healthz
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+
+volumes:
+  pgdata:

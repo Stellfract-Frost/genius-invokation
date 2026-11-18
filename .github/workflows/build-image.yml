@@ -11,10 +11,11 @@ on:
   # 同步上游 / 自己改代码后自动构建
   push:
     branches: [main]
-    # 文档类改动不触发构建，省时间
+    # 文档/部署脚本类改动不触发镜像构建，省时间
     paths-ignore:
       - "**.md"
       - "docs/**"
+      - "deploy/**"
 
 permissions:
   contents: read
