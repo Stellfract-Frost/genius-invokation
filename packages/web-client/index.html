@@ -19,6 +19,51 @@
   </head>
   <body>
     <!-- server:body -->
+    <!--
+      署名与源码声明（AGPL-3.0-or-later §13）：本实例基于 piovium/genius-invokation 构建，
+      原作者 guyutongxue（谷雨桐雪）。本实例的完整对应源码见下方链接。
+    -->
+    <div class="gi-attribution">
+      <a
+        href="https://github.com/Stellfract-Frost/genius-invokation"
+        target="_blank"
+        rel="noopener noreferrer"
+        title="本实例基于开源项目 雨酱牌（piovium/genius-invokation）构建，AGPL-3.0-or-later，原作者 guyutongxue"
+        >基于雨酱牌 · 原作者 guyutongxue · 本实例源码</a
+      >
+    </div>
+    <style>
+      .gi-attribution {
+        position: fixed;
+        left: 0;
+        bottom: 0;
+        z-index: 2147483647;
+        pointer-events: none;
+        padding: 2px 6px;
+        font: 11px/1.4 system-ui, -apple-system, sans-serif;
+        color: rgba(0, 0, 0, 0.45);
+        background: rgba(255, 255, 255, 0.5);
+        border-top-right-radius: 6px;
+        max-width: 62vw;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .gi-attribution a {
+        pointer-events: auto;
+        color: inherit;
+        text-decoration: none;
+      }
+      .gi-attribution a:hover {
+        text-decoration: underline;
+      }
+      @media (prefers-color-scheme: dark) {
+        .gi-attribution {
+          color: rgba(255, 255, 255, 0.5);
+          background: rgba(0, 0, 0, 0.35);
+        }
+      }
+    </style>
     <div id="app"></div>
     <script type="module" src="/src/index.tsx"></script>
   </body>
