@@ -1,0 +1,7 @@
+# 部署脚本会在 Linux 上直接执行，必须强制 LF，
+# 否则 Windows 下 core.autocrlf=true 提交后会出现 "bash\r: No such file or directory"
+deploy/** text eol=lf
+.github/workflows/** text eol=lf
+*.sh text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
