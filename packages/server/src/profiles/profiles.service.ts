@@ -18,6 +18,7 @@ import type { Version } from "@gi-tcg/core";
 import { customProfile, loadPresets, officialProfile } from "./compiler";
 import type { CompiledProfile } from "./types";
 import {
+  CARD_PIN,
   CHAR_BODY,
   LIANYU_PIN,
   SKILL_OWNER,
@@ -142,7 +143,14 @@ export class ProfilesService {
       }
     }
 
-    // ③ 防止依赖传播把本体版本拉低：
+    // ③ 行动牌：完全采用恋雨杯的指定版本（池内有才生效），不做数值比较
+    for (const [idStr, pinIdx] of Object.entries(CARD_PIN)) {
+      if (poolIdx.includes(pinIdx)) {
+        map[Number(idStr)] = VERSION_LIST[pinIdx] as Version;
+      }
+    }
+
+    // ④ 防止依赖传播把本体版本拉低：
     //    技能一旦钉了旧版，resolver 会沿依赖把角色本体也拉到那个版本，
     //    导致「本体该 11 血反而变 10 血」。显式钉住本体（root 优先）即可挡住。
     for (const skillId of pinnedSkills) {
@@ -207,6 +215,12 @@ export class ProfilesService {
         }
       }
       if (bestIdx !== baseIdx) map[id] = VERSION_LIST[bestIdx] as Version;
+    }
+    // 行动牌照样按恋雨杯钉（与角色判定无关）
+    for (const [idStr, pinIdx] of Object.entries(CARD_PIN)) {
+      if (poolIdx.includes(pinIdx)) {
+        map[Number(idStr)] = VERSION_LIST[pinIdx] as Version;
+      }
     }
     return map;
   }
