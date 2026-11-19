@@ -79,7 +79,10 @@ export class ProfilesService {
    *  - 技能：恋雨杯指定优先，否则描述数值和比大小，平局取较新
    * 这样「本体取最新 + 某个技能回调旧版」才能表达（如纯水精灵 11 血 + 爆发回 4.1）。
    */
-  private autoVersionMap(sorted: Version[]): Record<number, Version> {
+  private autoVersionMap(
+    sorted: Version[],
+    includeSkills = true,
+  ): Record<number, Version> {
     const baseIdx = VERSION_LIST.indexOf(sorted[sorted.length - 1] as never);
     if (baseIdx < 0) return {};
     const poolIdx = sorted
@@ -113,7 +116,7 @@ export class ProfilesService {
 
     // ② 技能：恋雨杯指定优先，否则描述数值和比大小（平局取较新）
     const pinnedSkills: number[] = [];
-    for (const idStr of Object.keys(SKILL_STATS)) {
+    for (const idStr of includeSkills ? Object.keys(SKILL_STATS) : []) {
       const id = Number(idStr);
       const base = skillAt(id, baseIdx);
       if (!base) continue;
@@ -156,6 +159,59 @@ export class ProfilesService {
   }
 
   /**
+   * 退化判定：整角色只取一个版本（用于依赖冲突、无法混版本时）。
+   * 排序依据：效果优先（该角色技能描述数值和）→ 血量 → 较新版本。
+   */
+  private coarseVersionMap(sorted: Version[]): Record<number, Version> {
+    const baseIdx = VERSION_LIST.indexOf(sorted[sorted.length - 1] as never);
+    if (baseIdx < 0) return {};
+    const poolIdx = sorted
+      .map((v) => VERSION_LIST.indexOf(v as never))
+      .filter((i) => i >= 0);
+    const skillsOf = new Map<number, number[]>();
+    for (const [sid, owner] of Object.entries(SKILL_OWNER)) {
+      const arr = skillsOf.get(owner) ?? [];
+      arr.push(Number(sid));
+      skillsOf.set(owner, arr);
+    }
+    const scoreOf = (charId: number, idx: number) => {
+      let total = 0;
+      for (const sid of skillsOf.get(charId) ?? []) {
+        const st = skillAt(sid, idx);
+        if (st) total += st[1];
+      }
+      return total;
+    };
+    const map: Record<number, Version> = {};
+    for (const idStr of Object.keys(CHAR_BODY)) {
+      const id = Number(idStr);
+      if (!bodyAt(id, baseIdx)) continue;
+      const avail = poolIdx.filter((i) => bodyAt(id, i) !== null);
+      if (avail.length === 0) continue;
+      let bestIdx = baseIdx;
+      const pin = LIANYU_PIN[id];
+      if (pin !== undefined && avail.includes(pin)) {
+        bestIdx = pin;
+      } else {
+        let bestScore = scoreOf(id, baseIdx);
+        let bestHp = bodyAt(id, baseIdx)![0];
+        for (const i of avail) {
+          const sc = scoreOf(id, i);
+          const hp = bodyAt(id, i)![0];
+          if (sc > bestScore || (sc === bestScore && hp > bestHp) ||
+              (sc === bestScore && hp === bestHp && i > bestIdx)) {
+            bestScore = sc;
+            bestHp = hp;
+            bestIdx = i;
+          }
+        }
+      }
+      if (bestIdx !== baseIdx) map[id] = VERSION_LIST[bestIdx] as Version;
+    }
+    return map;
+  }
+
+  /**
    * 练习用：把若干版本合成一个 profile（幂等，进程重启后失效）。
    * baseVersion 取池内最高版本；versionMap 默认按规则自动生成。
    */
@@ -174,22 +230,31 @@ export class ProfilesService {
       (a, b) => VERSIONS.indexOf(a as never) - VERSIONS.indexOf(b as never),
     );
     const baseVersion = sorted[sorted.length - 1];
-    const resolved =
+    const name = `练习 ${sorted.map((v) => v.replace(/^v/, "")).join(" + ")}`;
+    const build = (vm: Record<number, Version>) => {
+      const pinTag = Object.keys(vm).length;
+      const id = `practice/${sorted.join("-")}${pinTag ? `#${pinTag}` : ""}`;
+      return customProfile(baseVersion, { id, name, versionMap: vm });
+    };
+
+    let resolved =
       versionMap && Object.keys(versionMap).length > 0
         ? versionMap
         : this.autoVersionMap(sorted);
-    const pinTag = Object.keys(resolved).length;
-    const id = `practice/${sorted.join("-")}${pinTag ? `#${pinTag}` : ""}`;
-    const cached = this.profiles.get(id);
+    let compiled: CompiledProfile;
+    try {
+      compiled = build(resolved);
+    } catch {
+      // 细粒度混版本会撞依赖（例：吞星之鲸 本体 6.7 + 技能 4.8 → 122042 冲突）
+      // 退化为「整角色取一版」：效果优先 → 血量 → 较新
+      resolved = this.coarseVersionMap(sorted);
+      compiled = build(resolved);
+    }
+    const cached = this.profiles.get(compiled.profile.id);
     if (cached) {
       return cached;
     }
-    const compiled = customProfile(baseVersion, {
-      id,
-      name: `练习 ${sorted.map((v) => v.replace(/^v/, "")).join(" + ")}`,
-      versionMap: resolved,
-    });
-    this.profiles.set(id, compiled);
+    this.profiles.set(compiled.profile.id, compiled);
     return compiled;
   }
 
