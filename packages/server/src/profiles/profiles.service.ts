@@ -17,7 +17,13 @@ import { CURRENT_VERSION, VERSIONS } from "@gi-tcg/core";
 import type { Version } from "@gi-tcg/core";
 import { customProfile, loadPresets, officialProfile } from "./compiler";
 import type { CompiledProfile } from "./types";
-import { CHAR_BODY, LIANYU_PIN, SKILL_STATS, VERSION_LIST } from "./char-stats";
+import {
+  CHAR_BODY,
+  LIANYU_PIN,
+  SKILL_OWNER,
+  SKILL_STATS,
+  VERSION_LIST,
+} from "./char-stats";
 import { NotFoundException, BadRequestException } from "../errors";
 
 /** 角色本体在指定版本序号下的 [生命, 充能] */
@@ -80,6 +86,7 @@ export class ProfilesService {
       .map((v) => VERSION_LIST.indexOf(v as never))
       .filter((i) => i >= 0);
     const map: Record<number, Version> = {};
+    const bodyBest = new Map<number, number>();
 
     // ① 角色本体：生命↑、充能↓；恋雨杯指定版在池内时优先
     for (const idStr of Object.keys(CHAR_BODY)) {
@@ -100,10 +107,12 @@ export class ProfilesService {
           }
         }
       }
+      bodyBest.set(id, bestIdx);
       if (bestIdx !== baseIdx) map[id] = VERSION_LIST[bestIdx] as Version;
     }
 
-    // ② 技能：恋雨杯指定优先，否则按描述数值和比大小（平局取较新）
+    // ② 技能：恋雨杯指定优先，否则描述数值和比大小（平局取较新）
+    const pinnedSkills: number[] = [];
     for (const idStr of Object.keys(SKILL_STATS)) {
       const id = Number(idStr);
       const base = skillAt(id, baseIdx);
@@ -124,7 +133,23 @@ export class ProfilesService {
           }
         }
       }
-      if (bestIdx !== baseIdx) map[id] = VERSION_LIST[bestIdx] as Version;
+      if (bestIdx !== baseIdx) {
+        map[id] = VERSION_LIST[bestIdx] as Version;
+        pinnedSkills.push(id);
+      }
+    }
+
+    // ③ 防止依赖传播把本体版本拉低：
+    //    技能一旦钉了旧版，resolver 会沿依赖把角色本体也拉到那个版本，
+    //    导致「本体该 11 血反而变 10 血」。显式钉住本体（root 优先）即可挡住。
+    for (const skillId of pinnedSkills) {
+      const ownerId = SKILL_OWNER[skillId];
+      if (ownerId === undefined) continue;
+      if (map[ownerId] !== undefined) continue;
+      const best = bodyBest.get(ownerId);
+      if (best !== undefined) {
+        map[ownerId] = VERSION_LIST[best] as Version;
+      }
     }
 
     return map;
