@@ -28,6 +28,7 @@ import {
 import getData from "@gi-tcg/data";
 import { analyzeResult } from "@gi-tcg/data-code-analyzer";
 import { CustomDataLoader } from "@gi-tcg/custom-data-loader";
+import { CHAR_OVERRIDE } from "./char-stats";
 import type { OverrideData } from "@gi-tcg/assets-manager";
 import type {
   CompiledProfile,
