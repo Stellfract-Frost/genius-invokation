@@ -132,6 +132,16 @@ export function customProfile(
     data,
     { officialDeckCompatible, customData = [], overrideData = [] },
   ] = loader.done();
+  // 恋雨杯的字段级覆盖（如甘雨/宵宫 maxEnergy=2）引擎不会自动应用，必须手动写入运行时数据
+  for (const [idStr, ov] of Object.entries(CHAR_OVERRIDE)) {
+    const ch = data.characters.get(Number(idStr)) as unknown as {
+      varConfigs?: Record<string, { initialValue?: number }>;
+    } | null;
+    const vc = ch?.varConfigs;
+    if (!vc) continue;
+    if (ov.maxEnergy != null && vc.maxEnergy) vc.maxEnergy.initialValue = ov.maxEnergy;
+    if (ov.hp != null && vc.maxHealth) vc.maxHealth.initialValue = ov.hp;
+  }
   return finishProfile(
     {
       id: options.id,
