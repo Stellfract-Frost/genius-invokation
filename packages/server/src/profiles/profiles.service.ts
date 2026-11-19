@@ -17,21 +17,29 @@ import { CURRENT_VERSION, VERSIONS } from "@gi-tcg/core";
 import type { Version } from "@gi-tcg/core";
 import { customProfile, loadPresets, officialProfile } from "./compiler";
 import type { CompiledProfile } from "./types";
-import { CHAR_STATS, LIANYU_PIN, VERSION_LIST } from "./char-stats";
+import { CHAR_BODY, LIANYU_PIN, SKILL_STATS, VERSION_LIST } from "./char-stats";
 import { NotFoundException, BadRequestException } from "../errors";
 
-/** 某角色在指定版本序号下的 [生命, 充能, 技能文本指纹, 描述数值和] */
-function stateAt(
-  id: number,
-  idx: number,
-): [number, number, string, number] | null {
-  const seq = CHAR_STATS[id];
+/** 角色本体在指定版本序号下的 [生命, 充能] */
+function bodyAt(id: number, idx: number): [number, number] | null {
+  const seq = CHAR_BODY[id];
   if (!seq) return null;
-  let hit: [number, number, number, string, number] | null = null;
+  let hit: [number, number, number] | null = null;
   for (const e of seq) {
     if (e[0] <= idx) hit = e;
   }
-  return hit ? [hit[1], hit[2], hit[3], hit[4]] : null;
+  return hit ? [hit[1], hit[2]] : null;
+}
+
+/** 技能在指定版本序号下的 [文本指纹, 描述数值和] */
+function skillAt(id: number, idx: number): [string, number] | null {
+  const seq = SKILL_STATS[id];
+  if (!seq) return null;
+  let hit: [number, string, number] | null = null;
+  for (const e of seq) {
+    if (e[0] <= idx) hit = e;
+  }
+  return hit ? [hit[1], hit[2]] : null;
 }
 
 export class ProfilesService {
@@ -59,9 +67,11 @@ export class ProfilesService {
     return profile;
   }
   /**
-   * 按 strength-rules.md 自动生成 versionMap（仅角色维度：血量↑ 充能↓）。
-   * 只在"池内某个版本明显更优"时才钉版本，否则留给 baseVersion。
-   * 行动牌/技能的费用维度尚未纳入（见 rules 第六节）。
+   * 按 strength-rules.md 自动生成 versionMap。
+   * 角色本体与技能是两个独立判定单元：
+   *  - 本体：生命↑、充能↓（恋雨杯指定版在池内则优先）
+   *  - 技能：恋雨杯指定优先，否则描述数值和比大小，平局取较新
+   * 这样「本体取最新 + 某个技能回调旧版」才能表达（如纯水精灵 11 血 + 爆发回 4.1）。
    */
   private autoVersionMap(sorted: Version[]): Record<number, Version> {
     const baseIdx = VERSION_LIST.indexOf(sorted[sorted.length - 1] as never);
@@ -70,51 +80,53 @@ export class ProfilesService {
       .map((v) => VERSION_LIST.indexOf(v as never))
       .filter((i) => i >= 0);
     const map: Record<number, Version> = {};
-    for (const idStr of Object.keys(CHAR_STATS)) {
+
+    // ① 角色本体：生命↑、充能↓；恋雨杯指定版在池内时优先
+    for (const idStr of Object.keys(CHAR_BODY)) {
       const id = Number(idStr);
-      const base = stateAt(id, baseIdx);
-      if (!base) continue;
-      const avail = poolIdx.filter((i) => stateAt(id, i) !== null);
+      if (!bodyAt(id, baseIdx)) continue;
+      const avail = poolIdx.filter((i) => bodyAt(id, i) !== null);
       if (avail.length === 0) continue;
-
-      // 技能文本在池内是否变化（含与 base 的比较）
-      const hashes = new Set<string>([base[2]]);
-      for (const i of avail) {
-        hashes.add(stateAt(id, i)![2]);
-      }
-      const textChanged = hashes.size > 1;
-
       let bestIdx = baseIdx;
-      if (textChanged) {
-        // 文本有改动 → 禁止"取最新"（鲸鱼这类被削的卡就是反例）
-        const pin = LIANYU_PIN[id];
-        if (pin !== undefined && avail.includes(pin)) {
-          bestIdx = pin;
-        } else {
-          // 按技能描述里的数值和比强弱，平局取较新版本
-          let bestScore = base[3];
-          for (const i of avail) {
-            const s = stateAt(id, i)!;
-            if (s[3] > bestScore || (s[3] === bestScore && i > bestIdx)) {
-              bestScore = s[3];
-              bestIdx = i;
-            }
-          }
-        }
+      const pin = LIANYU_PIN[id];
+      if (pin !== undefined && avail.includes(pin)) {
+        bestIdx = pin;
       } else {
-        // 文本一致 → 只比数值：血量高、充能低
         for (const i of avail) {
-          const s = stateAt(id, i)!;
-          const b = stateAt(id, bestIdx)!;
+          const s = bodyAt(id, i)!;
+          const b = bodyAt(id, bestIdx)!;
           if (s[0] > b[0] || (s[0] === b[0] && s[1] < b[1])) {
             bestIdx = i;
           }
         }
       }
-      if (bestIdx !== baseIdx && bestIdx >= 0) {
-        map[id] = VERSION_LIST[bestIdx] as Version;
-      }
+      if (bestIdx !== baseIdx) map[id] = VERSION_LIST[bestIdx] as Version;
     }
+
+    // ② 技能：恋雨杯指定优先，否则按描述数值和比大小（平局取较新）
+    for (const idStr of Object.keys(SKILL_STATS)) {
+      const id = Number(idStr);
+      const base = skillAt(id, baseIdx);
+      if (!base) continue;
+      const avail = poolIdx.filter((i) => skillAt(id, i) !== null);
+      if (avail.length === 0) continue;
+      let bestIdx = baseIdx;
+      const pin = LIANYU_PIN[id];
+      if (pin !== undefined && avail.includes(pin)) {
+        bestIdx = pin;
+      } else {
+        let bestScore = base[1];
+        for (const i of avail) {
+          const s = skillAt(id, i)!;
+          if (s[1] > bestScore || (s[1] === bestScore && i > bestIdx)) {
+            bestScore = s[1];
+            bestIdx = i;
+          }
+        }
+      }
+      if (bestIdx !== baseIdx) map[id] = VERSION_LIST[bestIdx] as Version;
+    }
+
     return map;
   }
 

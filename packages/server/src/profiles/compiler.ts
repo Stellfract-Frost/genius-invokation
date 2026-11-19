@@ -118,6 +118,20 @@ export function customProfile(
     versionMap?: Record<number, Version>;
   },
 ): CompiledProfile {
+  const versionMap = options.versionMap ?? {};
+  // 必须走 resolver + CustomDataLoader，否则 versionMap 不会作用到实际数据上
+  // （与 compilePreset 保持同一条链路）
+  const resolver = createOfficialVersionResolver(
+    baseVersion,
+    versionMap,
+    analyzeResult,
+  );
+  const loader = new CustomDataLoader();
+  loader.setVersion(resolver);
+  const [
+    data,
+    { officialDeckCompatible, customData = [], overrideData = [] },
+  ] = loader.done();
   return finishProfile(
     {
       id: options.id,
@@ -126,16 +140,16 @@ export function customProfile(
       officialDeckCompatible: true,
       gameConfig: { ...DEFAULT_GAME_CONFIG },
       versionBehavior: getVersionBehavior(baseVersion),
-      versionMap: options.versionMap ?? {},
+      versionMap,
       mods: [],
       assets: {
-        version: baseVersion,
-        customData: [],
-        overrideData: [],
-        officialDeckCompatible: true,
+        version: { ...resolver.versionMap },
+        customData,
+        overrideData,
+        officialDeckCompatible,
       },
     },
-    getData(baseVersion),
+    data,
   );
 }
 
