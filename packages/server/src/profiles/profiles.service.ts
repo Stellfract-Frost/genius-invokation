@@ -17,18 +17,21 @@ import { CURRENT_VERSION, VERSIONS } from "@gi-tcg/core";
 import type { Version } from "@gi-tcg/core";
 import { customProfile, loadPresets, officialProfile } from "./compiler";
 import type { CompiledProfile } from "./types";
-import { CHAR_STATS, VERSION_LIST } from "./char-stats";
+import { CHAR_STATS, LIANYU_PIN, VERSION_LIST } from "./char-stats";
 import { NotFoundException, BadRequestException } from "../errors";
 
-/** 某角色在指定版本序号下的 (生命, 充能)；该版本尚无此角色时返回 null */
-function stateAt(id: number, idx: number): [number, number] | null {
+/** 某角色在指定版本序号下的 [生命, 充能, 技能文本指纹, 描述数值和] */
+function stateAt(
+  id: number,
+  idx: number,
+): [number, number, string, number] | null {
   const seq = CHAR_STATS[id];
   if (!seq) return null;
-  let hit: [number, number, number] | null = null;
+  let hit: [number, number, number, string, number] | null = null;
   for (const e of seq) {
     if (e[0] <= idx) hit = e;
   }
-  return hit ? [hit[1], hit[2]] : null;
+  return hit ? [hit[1], hit[2], hit[3], hit[4]] : null;
 }
 
 export class ProfilesService {
@@ -71,17 +74,44 @@ export class ProfilesService {
       const id = Number(idStr);
       const base = stateAt(id, baseIdx);
       if (!base) continue;
+      const avail = poolIdx.filter((i) => stateAt(id, i) !== null);
+      if (avail.length === 0) continue;
+
+      // 技能文本在池内是否变化（含与 base 的比较）
+      const hashes = new Set<string>([base[2]]);
+      for (const i of avail) {
+        hashes.add(stateAt(id, i)![2]);
+      }
+      const textChanged = hashes.size > 1;
+
       let bestIdx = baseIdx;
-      let best = base;
-      for (const i of poolIdx) {
-        const s = stateAt(id, i);
-        if (!s) continue;
-        if (s[0] > best[0] || (s[0] === best[0] && s[1] < best[1])) {
-          best = s;
-          bestIdx = i;
+      if (textChanged) {
+        // 文本有改动 → 禁止"取最新"（鲸鱼这类被削的卡就是反例）
+        const pin = LIANYU_PIN[id];
+        if (pin !== undefined && avail.includes(pin)) {
+          bestIdx = pin;
+        } else {
+          // 按技能描述里的数值和比强弱，平局取较新版本
+          let bestScore = base[3];
+          for (const i of avail) {
+            const s = stateAt(id, i)!;
+            if (s[3] > bestScore || (s[3] === bestScore && i > bestIdx)) {
+              bestScore = s[3];
+              bestIdx = i;
+            }
+          }
+        }
+      } else {
+        // 文本一致 → 只比数值：血量高、充能低
+        for (const i of avail) {
+          const s = stateAt(id, i)!;
+          const b = stateAt(id, bestIdx)!;
+          if (s[0] > b[0] || (s[0] === b[0] && s[1] < b[1])) {
+            bestIdx = i;
+          }
         }
       }
-      if (bestIdx !== baseIdx) {
+      if (bestIdx !== baseIdx && bestIdx >= 0) {
         map[id] = VERSION_LIST[bestIdx] as Version;
       }
     }
