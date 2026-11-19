@@ -103,6 +103,42 @@ export function officialProfile(baseVersion: Version): CompiledProfile {
   );
 }
 
+/**
+ * 练习用自定义 profile：指定基础版本 + 逐实体版本映射。
+ * 用途：赛前练牌时"多选版本"，把若干版本合成一个卡池。
+ * - baseVersion 取池内最高版本，天然禁止 sinceVersion 更高的角色/牌
+ *   （verifyDeckForProfile 会校验牌组版本不得高于 baseVersion）
+ * - versionMap 用于把个别实体钉到池内另一个版本（强度按抽到的版本取）
+ */
+export function customProfile(
+  baseVersion: Version,
+  options: {
+    id: string;
+    name: string;
+    versionMap?: Record<number, Version>;
+  },
+): CompiledProfile {
+  return finishProfile(
+    {
+      id: options.id,
+      name: options.name,
+      baseVersion,
+      officialDeckCompatible: true,
+      gameConfig: { ...DEFAULT_GAME_CONFIG },
+      versionBehavior: getVersionBehavior(baseVersion),
+      versionMap: options.versionMap ?? {},
+      mods: [],
+      assets: {
+        version: baseVersion,
+        customData: [],
+        overrideData: [],
+        officialDeckCompatible: true,
+      },
+    },
+    getData(baseVersion),
+  );
+}
+
 export async function compilePreset(
   preset: Preset,
   source: URL,

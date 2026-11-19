@@ -23,6 +23,7 @@ import {
   JSX,
   splitProps,
 } from "solid-js";
+import { VERSIONS } from "@gi-tcg/core";
 import { makePersisted } from "@solid-primitives/storage";
 import axios, { AxiosError } from "axios";
 import { ToggleSwitch } from "./ToggleSwitch";
@@ -164,6 +165,10 @@ export function RoomDialog(props: RoomDialogProps) {
     axios.get<ProfileList>("profiles").then(({ data }) => data),
   );
   const [profile, setProfile] = createSignal<ProfileSummary>();
+  // 练习模式：多选版本合并成一个临时 profile（无禁用）
+  const [mergeOpen, setMergeOpen] = createSignal(false);
+  const [mergePicked, setMergePicked] = createSignal<string[]>([]);
+  const [merging, setMerging] = createSignal(false);
   const [timeConfig, setTimeConfig] = createSignal(TIME_CONFIGS[1]);
   const [isPublic, setIsPublic] = createSignal(true);
   const [watchable, setWatchable] = createSignal(true);
@@ -196,6 +201,26 @@ export function RoomDialog(props: RoomDialogProps) {
       }
     }
     return false;
+  };
+
+  const toggleMergePick = (v: string) => {
+    const cur = mergePicked();
+    setMergePicked(cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v]);
+  };
+  const applyMerge = async () => {
+    setMerging(true);
+    try {
+      const { data } = await axios.post<ProfileSummary>("profiles/merge", {
+        versions: mergePicked(),
+      });
+      setProfile(data);
+      setSavedProfile(data.id);
+      setMergeOpen(false);
+    } catch (e) {
+      alert(getErrorMessage(e));
+    } finally {
+      setMerging(false);
+    }
   };
 
   const updateAvailableDecks = async (
@@ -349,8 +374,70 @@ export function RoomDialog(props: RoomDialogProps) {
                     <option value={profile.id}>{profile.name}</option>
                   )}
                 </For>
+                <Show
+                  when={
+                    profile() &&
+                    !(profiles()?.profiles ?? []).some(
+                      (p) => p.id === profile()!.id,
+                    )
+                  }
+                >
+                  <option value={profile()!.id}>{profile()!.name}</option>
+                </Show>
               </select>
+              <button
+                type="button"
+                class="text-sm px-2 py-1 rounded border border-gray-400/50 whitespace-nowrap disabled:opacity-40"
+                disabled={!editable() || !!props.joiningRoomInfo}
+                onClick={() => {
+                  setMergePicked([]);
+                  setMergeOpen(!mergeOpen());
+                }}
+              >
+                自定义版本
+              </button>
             </div>
+            <Show when={mergeOpen()}>
+              <div class="mb-3 p-3 rounded-lg border border-gray-400/40">
+                <div class="text-sm mb-2">
+                  选择要合并的版本（2~6 个）：只用这些版本的强度取最强，<b>练习模式不含禁用</b>
+                </div>
+                <div class="flex flex-wrap gap-2 mb-3 max-h-60 overflow-auto">
+                  <For each={VERSIONS}>
+                    {(v) => (
+                      <button
+                        type="button"
+                        class="text-xs px-2 py-1 rounded border"
+                        classList={{
+                          "border-amber-500 bg-amber-500/20": mergePicked().includes(v),
+                          "border-gray-400/40": !mergePicked().includes(v),
+                        }}
+                        onClick={() => toggleMergePick(v)}
+                      >
+                        {v}
+                      </button>
+                    )}
+                  </For>
+                </div>
+                <div class="flex gap-2">
+                  <button
+                    type="button"
+                    class="text-sm px-3 py-1 rounded border border-amber-500 bg-amber-500/20 disabled:opacity-40"
+                    disabled={mergePicked().length < 2 || merging()}
+                    onClick={applyMerge}
+                  >
+                    {merging() ? "生成中…" : `生成并选用（${mergePicked().length}）`}
+                  </button>
+                  <button
+                    type="button"
+                    class="text-sm px-3 py-1 rounded border border-gray-400/40"
+                    onClick={() => setMergeOpen(false)}
+                  >
+                    取消
+                  </button>
+                </div>
+              </div>
+            </Show>
             <h4 class="text-lg mb-3">{t("thinkingTime")}</h4>
             <div class="w-full grid grid-cols-[repeat(auto-fill,minmax(100px,1fr))] md:grid-cols-3 gap-2 mb-3 data-[disabled=true]:pointer-events-none">
               <For

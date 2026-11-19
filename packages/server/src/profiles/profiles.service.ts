@@ -14,9 +14,10 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import { CURRENT_VERSION, VERSIONS } from "@gi-tcg/core";
-import { loadPresets, officialProfile } from "./compiler";
+import type { Version } from "@gi-tcg/core";
+import { customProfile, loadPresets, officialProfile } from "./compiler";
 import type { CompiledProfile } from "./types";
-import { NotFoundException } from "../errors";
+import { NotFoundException, BadRequestException } from "../errors";
 
 export class ProfilesService {
   readonly defaultProfileId = `official/${CURRENT_VERSION}`;
@@ -42,6 +43,39 @@ export class ProfilesService {
     }
     return profile;
   }
+  /**
+   * 练习用：把若干版本合成一个 profile（幂等，进程重启后失效）。
+   * baseVersion 取池内最高版本；versionMap 可把个别实体钉到池内其他版本。
+   */
+  createMerged(
+    versions: Version[],
+    versionMap: Record<number, Version> = {},
+  ): CompiledProfile {
+    if (!Array.isArray(versions) || versions.length === 0) {
+      throw new BadRequestException("versions must be a non-empty array");
+    }
+    const unknown = versions.filter((v) => !VERSIONS.includes(v as never));
+    if (unknown.length > 0) {
+      throw new BadRequestException(`unknown versions: ${unknown.join(", ")}`);
+    }
+    const sorted = [...new Set(versions)].sort(
+      (a, b) => VERSIONS.indexOf(a as never) - VERSIONS.indexOf(b as never),
+    );
+    const baseVersion = sorted[sorted.length - 1];
+    const id = `practice/${sorted.join("-")}`;
+    const cached = this.profiles.get(id);
+    if (cached) {
+      return cached;
+    }
+    const compiled = customProfile(baseVersion, {
+      id,
+      name: `练习 ${sorted.map((v) => v.replace(/^v/, "")).join(" + ")}`,
+      versionMap,
+    });
+    this.profiles.set(id, compiled);
+    return compiled;
+  }
+
   list() {
     return {
       defaultProfileId: this.defaultProfileId,
