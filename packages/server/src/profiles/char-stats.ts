@@ -11,6 +11,13 @@ export const CHAR_OVERRIDE: Record<number,{hp?:number;maxEnergy?:number}> = {"11
 // 恋雨杯的费用覆盖（如魔偶剑鬼 25013 的霜驰影突改回 3 风骰）
 export const PLAYCOST_OVERRIDE: Record<number, {type: string; count: number}[]> = {"25013":[{"type":"GCG_COST_DICE_ANEMO","count":3}]};
 // 人工补充的限制型削弱：从该版本序号起，文本加了限制（更弱）。
-// 吞星之鲸 v6.6 起把「原本费用」改为「当前费用」，技能/领域/幻影都变弱。
+// 吞星之鲸 v6.6 起把「原本费用」改为「当前费用」，技能变弱。
 export const SKILL_RESTRICTION: Record<number, number> = {"22042":31};
-export const ENTITY_RESTRICTION: Record<number, number> = {"122041":31,"122043":31};
+// 关联实体没有描述数值和可用，按人工判定的强度顺序排列；
+// 运行时取“顺序里第一个在抽选池中的版本”。同强度取较新的。
+export const ENTITY_PREFERENCE: Record<number, number[]> = {
+  // 深噬之域：4.8 的“卡牌+立刻”最强，4.7 次之；5.x 改成回合结束，6.1 加“从手牌”，6.6 加“当前费用”
+  "122041": [15, 14, 25, 19, 26, 31, 34],
+  // 黑色幻影：4.7/4.8 无“当前”限制；5.x 加“当前”，6.1 去掉“和我方宣布结束时”，6.6 再改
+  "122043": [15, 14, 25, 19, 26, 31, 34],
+};

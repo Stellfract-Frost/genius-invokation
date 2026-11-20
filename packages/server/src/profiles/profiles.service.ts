@@ -21,7 +21,7 @@ import {
   CARD_PIN,
   CHAR_BODY,
   CHAR_OVERRIDE,
-  ENTITY_RESTRICTION,
+  ENTITY_PREFERENCE,
   LIANYU_PIN,
   SKILL_OWNER,
   SKILL_RESTRICTION,
@@ -193,12 +193,11 @@ export class ProfilesService {
       }
     }
 
-    // ③ 关联实体（领域/召唤物等）如果也有“加限制”的削弱点，
-    //    在限制之前的抽选版本里取最新一版。
-    for (const [idStr, weakerFrom] of Object.entries(ENTITY_RESTRICTION)) {
-      const allowed = poolIdx.filter((i) => i < weakerFrom);
-      const candidates = allowed.length > 0 ? allowed : poolIdx;
-      const idx = candidates[candidates.length - 1];
+    // ③ 关联实体（领域/召唤物等）按人工强弱的版本顺序，取池内最强的一版。
+    for (const [idStr, order] of Object.entries(ENTITY_PREFERENCE)) {
+      const idx =
+        order.find((i) => poolIdx.includes(i)) ??
+        poolIdx[poolIdx.length - 1];
       if (idx !== undefined) {
         map[Number(idStr)] = VERSION_LIST[idx] as Version;
       }
