@@ -74,6 +74,15 @@ export function Card(props: CardProps) {
           e.preventDefault();
           showCard(e, props.type, props.id);
         }}
+        onClick={(e) => {
+          // 透明层盖在卡面上，手机端点不到下面 hover 才出现的放大镜。
+          // 命中卡面上方 25%（放大镜区域）时按放大镜处理，其余区域让事件冒泡去选中/取消。
+          const rect = e.currentTarget.getBoundingClientRect();
+          if (e.clientY - rect.top <= rect.height * 0.25) {
+            e.stopPropagation();
+            showCard(e, props.type, props.id);
+          }
+        }}
       />
     </div>
   );
