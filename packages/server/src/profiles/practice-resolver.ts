@@ -8,7 +8,7 @@
 //  1. 显式指定的版本永远优先，且不会被依赖传播覆盖；
 //  2. 传播时"先到先得"，冲突只记录不抛错（旧版本优先，符合"效果优先/预削弱"口径）；
 //  3. 未命中任何指定的实体回落到 baseVersion。
-import { VERSIONS, versionCompare } from "@gi-tcg/core";
+import { VERSIONS } from "@gi-tcg/core";
 import type { DependencyInfo, Version } from "@gi-tcg/core";
 
 interface VersionCandidate {
@@ -18,6 +18,9 @@ interface VersionCandidate {
     readonly value: { readonly predicate: "since" | "until"; readonly version: Version };
   };
 }
+
+const versionCompare = (a: Version, b: Version) =>
+  VERSIONS.indexOf(a) - VERSIONS.indexOf(b);
 
 function pickOfficial<T extends VersionCandidate>(
   candidates: readonly T[],
@@ -110,5 +113,3 @@ export function createPracticeResolver(
   fn.log = log;
   return fn as never;
 }
-
-export const _VERSIONS = VERSIONS;
