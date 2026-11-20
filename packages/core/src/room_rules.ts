@@ -74,7 +74,8 @@ export const ROOM_RULES: readonly RoomRuleMeta[] = [
   {
     id: "shiftingCost",
     name: "变化",
-    description: "手牌的元素骰费用在 0~3 之间随机。",
+    description:
+      "每回合开始时统计手牌总费用，随机让手中所有手牌增费、减费或不变，重新分配后手牌总费用保持不变。",
     polarity: "buff",
   },
   {
@@ -144,8 +145,8 @@ export const UNDERCURRENT_STACKS = 2;
 /** 禁忌知识开局塞入的张数 */
 export const FORBIDDEN_KNOWLEDGE_COUNT = 6;
 
-/** 「变化」规则的费用上限（0 ~ 3） */
-export const SHIFTING_COST_MAX = 3;
+/** `variables.ruleCost` 取该值表示「没有受到变化规则影响」，按原始费用计算 */
+export const RULE_COST_NONE = -1;
 
 /** 部分规则需要直接引用数据层的定义 id */
 export const RULE_RELATED_DEFINITION_IDS = {
@@ -295,6 +296,58 @@ export function shiftedCostOf(
   }
   if (legend > 0) {
     result.set(DiceType.Legend, legend);
+  }
+  return result;
+}
+
+function pickSome(
+  items: readonly number[],
+  count: number,
+  random: () => number,
+): number[] {
+  const pool = [...items];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = random() % (i + 1);
+    [pool[i], pool[j]] = [pool[j]!, pool[i]!];
+  }
+  return pool.slice(0, count);
+}
+
+/**
+ * 「变化」：在**总费用不变**的前提下，把手上手牌的费用随机重新分配。
+ *
+ * 每张牌只会被增费（+1）、减费（-1）或不变，且增费与减费总是成对出现，
+ * 因此所有手牌的元素骰费用总和严格守恒。传入的是每张牌的原始费用（不含
+ * 能量与秘传），返回对应的新费用；同一张牌不会被同时增费和减费。
+ */
+export function redistributeShiftingCosts(
+  baseCosts: readonly number[],
+  random: () => number,
+): number[] {
+  const result = [...baseCosts];
+  const decreaseCandidates = baseCosts.flatMap((cost, index) =>
+    cost > 0 ? [index] : [],
+  );
+  const maxPairs = Math.min(
+    Math.floor(baseCosts.length / 2),
+    decreaseCandidates.length,
+  );
+  if (maxPairs === 0) {
+    // 只剩 1 张牌或全部 0 费，无法成对调整
+    return result;
+  }
+  const pairs = 1 + (random() % maxPairs);
+  const decreaseIndices = pickSome(decreaseCandidates, pairs, random);
+  const increaseIndices = pickSome(
+    result.flatMap((_, index) => (decreaseIndices.includes(index) ? [] : [index])),
+    pairs,
+    random,
+  );
+  for (const index of increaseIndices) {
+    result[index] = result[index]! + 1;
+  }
+  for (const index of decreaseIndices) {
+    result[index] = result[index]! - 1;
   }
   return result;
 }

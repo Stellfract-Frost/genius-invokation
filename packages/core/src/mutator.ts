@@ -46,11 +46,7 @@ import {
   type CreateEntityOptions,
   type InsertEntityOptions,
 } from "./utils";
-import {
-  SHIFTING_COST_MAX,
-  hasRule,
-  isRuleActiveThisRound,
-} from "./room_rules";
+import { hasRule } from "./room_rules";
 import {
   GiTcgCoreInternalError,
   GiTcgDataError,
@@ -976,31 +972,10 @@ export class StateMutator {
     const reason =
       payload.type === "createEntity" ? ("create" as const) : payload.reason;
     this.mutate(payload);
-    let state: EntityState = {
+    const state: EntityState = {
       ...payload.value,
       [StateSymbol]: "entity",
     };
-    // 特殊规则「变化」：手牌进入手牌区的那一刻确定费用，此后固定不再变化
-    //（洗回牌库时费用随实体一起保留，再次上手也不会重掷）
-    if (isRuleActiveThisRound(this.state, "shiftingCost")) {
-      const hands = this.state.players[who].hands;
-      const inserted = hands[hands.length - 1];
-      if (
-        inserted &&
-        typeof inserted.variables.ruleCost === "undefined"
-      ) {
-        const value = this.stepRandom() % (SHIFTING_COST_MAX + 1);
-        this.mutate({
-          type: "modifyEntityVar",
-          state: inserted,
-          varName: "ruleCost",
-          oldValue: 0,
-          value,
-          direction: null,
-        });
-        state = getEntityById(this.state, inserted.id) as EntityState;
-      }
-    }
     let overflowed = false;
     if (
       !opt.noOverflow &&

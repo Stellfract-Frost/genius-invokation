@@ -109,7 +109,7 @@ test("shiftingCost: 手牌费用被固定值覆写", async () => {
       <Card my def={MondstadtHashBrown} v={{ ruleCost: 0 }} />
     </State>,
   );
-  // 原费用为 2，覆写为 0 后无需任何骰子即可打出
+  // 原费用为 1，覆写为 0 后无需任何骰子即可打出
   await c.me.card(MondstadtHashBrown, target);
   c.expect($.my.active).toHaveVariable({ health: 7 });
 });
@@ -125,6 +125,46 @@ test("shiftingCost: 未设置 ruleCost 的手牌仍按原费用计算", async ()
   );
   // 没有 ruleCost 变量时不覆写，行为与原版一致
   c.expect($.my.active).toHaveVariable({ health: 5 });
+});
+
+test("shiftingCost: 回合开始时重分配，且手牌总费用不变", async () => {
+  const c = setup(
+    <State config={{ roomRules: ["shiftingCost"] }}>
+      <Character my active def={Venti} />
+      <Character opp active />
+      <Card my def={MondstadtHashBrown} />
+      <Card my def={MondstadtHashBrown} />
+      <Card my def={MondstadtHashBrown} />
+      <Card my def={MondstadtHashBrown} />
+    </State>,
+  );
+  await c.me.end();
+  await c.opp.end();
+  const costs = c.state.players[0].hands.map(
+    (card) => card.variables.ruleCost,
+  );
+  // 4 张 1 费牌，重分配后总和仍为 4
+  expect(costs.reduce((acc, value) => acc + (value ?? 0), 0)).toBe(4);
+  // 至少一张增费（2）、至少一张减费（0）
+  expect(costs.some((value) => value === 2)).toBe(true);
+  expect(costs.some((value) => value === 0)).toBe(true);
+});
+
+test("shiftingCost: 没有规则时不会给手牌写入费用覆盖", async () => {
+  const c = setup(
+    <State>
+      <Character my active def={Venti} />
+      <Character opp active />
+      <Card my def={MondstadtHashBrown} />
+      <Card my def={MondstadtHashBrown} />
+    </State>,
+  );
+  await c.me.end();
+  await c.opp.end();
+  const costs = c.state.players[0].hands.map(
+    (card) => card.variables.ruleCost,
+  );
+  expect(costs.every((value) => typeof value === "undefined")).toBe(true);
 });
 
 test("restraint: 每回合最多打出 3 张手牌", async () => {

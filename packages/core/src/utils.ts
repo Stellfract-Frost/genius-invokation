@@ -1036,12 +1036,14 @@ export function applyAttachmentModifications(
       costs.set(DiceType.Legend, legendCost);
     }
   }
-  // 特殊规则「变化」：使用手牌上手时固定下来的费用覆写（能量 / 秘传费用不受影响）
+  // 特殊规则「变化」：使用回合开始时分配好的费用覆写（能量 / 秘传费用不受影响）
+  const ruleCost = card.variables.ruleCost;
   if (
     isRuleActiveThisRound(state, "shiftingCost") &&
-    typeof card.variables.ruleCost === "number"
+    typeof ruleCost === "number" &&
+    ruleCost >= 0
   ) {
-    costs = shiftedCostOf(costs, card.variables.ruleCost);
+    costs = shiftedCostOf(costs, ruleCost);
   }
   return {
     requiredCost: normalizeCost(costs),

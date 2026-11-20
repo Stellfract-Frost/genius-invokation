@@ -159,7 +159,7 @@ export default {
   rule_extraDraw_desc: "对局开始时手牌数量变为 7 张。",
   rule_shiftingCost_name: "变化",
   rule_shiftingCost_desc:
-    "手牌抽到手上时，元素骰费用随机变为 0~3，之后固定不变。",
+    "每回合开始时统计手牌总费用，随机让手中所有手牌增费、减费或不变；重新分配后总费用保持不变。",
   rule_regeneration_name: "回复",
   rule_regeneration_desc: "每回合结束时，双方所有角色回复 1 点生命。",
   rule_extraDie_name: "增费",

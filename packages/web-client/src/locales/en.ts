@@ -162,7 +162,7 @@ deckVersion: "Version",
   rule_extraDraw_desc: "Starting hand size becomes 7.",
   rule_shiftingCost_name: "Shift",
   rule_shiftingCost_desc:
-    "Cards get a random dice cost of 0-3 when drawn into hand, then it stays fixed.",
+    "At the start of each round, cards in hand are randomly increased, decreased or left unchanged, keeping the total hand cost the same.",
   rule_regeneration_name: "Recovery",
   rule_regeneration_desc:
     "At the end of each round, all characters on both sides heal 1 HP.",

@@ -73,6 +73,7 @@ import {
   applyAutoSelectedDiceToAction,
   isChargedPlunging,
   applyAttachmentModifications,
+  originalDiceCostSizeOfCard,
 } from "./utils";
 import type { GameData } from "./data/registry";
 import {
@@ -114,10 +115,12 @@ import {
   FORBIDDEN_KNOWLEDGE_COUNT,
   RESTRAINT_PLAY_LIMIT,
   RULE_EXTENSION_ID,
+  RULE_COST_NONE,
   RULE_RELATED_DEFINITION_IDS,
   RULE_PLACEHOLDER_SKILL,
   UNDERCURRENT_STACKS,
   drawChaosRule,
+  redistributeShiftingCosts,
   getPlayedCards,
   getRoomRules,
   getRuleRuntime,
@@ -443,6 +446,9 @@ export class Game {
       }
     }
 
+    // 「变化」：回合开始时在总费用不变的前提下重新分配手牌费用
+    this.ruleShiftingCost();
+
     // 暗流：双方各获得 2 层「暗流的诅咒」
     if (isRuleActiveThisRound(this.state, "undercurrent")) {
       const definition = this.state.data.entities.get(
@@ -462,6 +468,49 @@ export class Game {
           }
         }
       }
+    }
+  }
+
+  /**
+   * 「变化」：回合开始时统计手牌总费用，在总额不变的前提下重新分配。
+   *
+   * 每张牌只会有增费（+1）、减费（-1）或不变三种结果，且增费与减费成对出现，
+   * 所以重新分配后的手牌总费用与分配前完全一致。
+   */
+  private ruleShiftingCost() {
+    const active = isRuleActiveThisRound(this.state, "shiftingCost");
+    for (const who of [0, 1] as const) {
+      const hands = this.state.players[who].hands;
+      if (hands.length === 0) {
+        continue;
+      }
+      const baseCosts = hands.map((card) =>
+        originalDiceCostSizeOfCard(card.definition),
+      );
+      const nextCosts = active
+        ? redistributeShiftingCosts(baseCosts, () =>
+            this.mutator.stepRandom(),
+          )
+        : baseCosts.map(() => RULE_COST_NONE);
+      hands.forEach((card, index) => {
+        const current = card.variables.ruleCost;
+        const next = nextCosts[index]!;
+        if (current === next) {
+          return;
+        }
+        // 规则本回合未生效时，只清理此前留下的覆盖值
+        if (!active && !(typeof current === "number" && current >= 0)) {
+          return;
+        }
+        this.mutate({
+          type: "modifyEntityVar",
+          state: card,
+          varName: "ruleCost",
+          oldValue: 0,
+          value: next,
+          direction: null,
+        });
+      });
     }
   }
 
