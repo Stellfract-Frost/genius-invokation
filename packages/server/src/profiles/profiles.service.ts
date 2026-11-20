@@ -21,8 +21,10 @@ import {
   CARD_PIN,
   CHAR_BODY,
   CHAR_OVERRIDE,
+  ENTITY_RESTRICTION,
   LIANYU_PIN,
   SKILL_OWNER,
+  SKILL_RESTRICTION,
   SKILL_STATS,
   VERSION_LIST,
 } from "./char-stats";
@@ -129,7 +131,9 @@ export class ProfilesService {
       const bestIdx = this.bodyChoice(id, poolIdx, baseIdx);
       if (bestIdx === null) continue;
       bodyBest.set(id, bestIdx);
-      if (bestIdx !== baseIdx) map[id] = VERSION_LIST[bestIdx] as Version;
+      // 显式钉住本体：行动牌的恋雨杯版本可能沿依赖把技能/本体拉旧，
+      // 角色本体必须保留在本池选出的版本。
+      map[id] = VERSION_LIST[bestIdx] as Version;
     }
 
     // ② 技能：恋雨杯指定优先，否则描述数值和比大小（平局取较新）
@@ -138,8 +142,15 @@ export class ProfilesService {
       const id = Number(idStr);
       const base = skillAt(id, baseIdx);
       if (!base) continue;
-      const avail = poolIdx.filter((i) => skillAt(id, i) !== null);
-      if (avail.length === 0) continue;
+      const rawAvail = poolIdx.filter((i) => skillAt(id, i) !== null);
+      if (rawAvail.length === 0) continue;
+      // 已知“从某版起加限制”的技能，只允许取限制之前的版本。
+      const weakerFrom = SKILL_RESTRICTION[id];
+      const cappedAvail =
+        weakerFrom !== undefined
+          ? rawAvail.filter((i) => i < weakerFrom)
+          : rawAvail;
+      const avail = cappedAvail.length > 0 ? cappedAvail : rawAvail;
       let bestIdx = baseIdx;
       const pin = LIANYU_PIN[id];
       if (pin !== undefined && avail.includes(pin)) {
@@ -174,13 +185,26 @@ export class ProfilesService {
           }
         }
       }
+      // 所有可用技能都显式钉到本池选出的版本，防止行动牌的旧版依赖
+      // 把角色技能一起拉旧。
+      map[id] = VERSION_LIST[bestIdx] as Version;
       if (bestIdx !== baseIdx) {
-        map[id] = VERSION_LIST[bestIdx] as Version;
         pinnedSkills.push(id);
       }
     }
 
-    // ③ 行动牌：完全采用恋雨杯的指定版本，不受抽选版本限制
+    // ③ 关联实体（领域/召唤物等）如果也有“加限制”的削弱点，
+    //    在限制之前的抽选版本里取最新一版。
+    for (const [idStr, weakerFrom] of Object.entries(ENTITY_RESTRICTION)) {
+      const allowed = poolIdx.filter((i) => i < weakerFrom);
+      const candidates = allowed.length > 0 ? allowed : poolIdx;
+      const idx = candidates[candidates.length - 1];
+      if (idx !== undefined) {
+        map[Number(idStr)] = VERSION_LIST[idx] as Version;
+      }
+    }
+
+    // ④ 行动牌：完全采用恋雨杯的指定版本，不受抽选版本限制
     for (const [idStr, pinIdx] of Object.entries(CARD_PIN)) {
       map[Number(idStr)] = VERSION_LIST[pinIdx] as Version;
     }
@@ -308,7 +332,7 @@ export class ProfilesService {
           }
         }
       }
-      if (bestIdx !== baseIdx) map[id] = VERSION_LIST[bestIdx] as Version;
+      map[id] = VERSION_LIST[bestIdx] as Version;
     }
     // 退化时仍保留恋雨杯的技能指定（其自身配置自洽，如夜兰 12093→4.6）
     for (const idStr of includeSkills ? Object.keys(SKILL_STATS) : []) {
