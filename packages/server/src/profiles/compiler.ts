@@ -134,15 +134,29 @@ export function customProfile(
     { officialDeckCompatible, customData = [], overrideData = [] },
   ] = loader.done();
   // 集所长的字段级覆盖：本体取池内血量最高的版本，充能取池内最低值。
-  // 例：池含 3.3（2 充能）+ 7.2（12 血）→ 12 血 / 2 充能。
-  for (const [idStr, ov] of Object.entries(options.fieldOverrides ?? {})) {
-    const ch = data.characters.get(Number(idStr)) as unknown as {
-      varConfigs?: Record<string, { initialValue?: number }>;
-    } | null;
-    const vc = ch?.varConfigs;
-    if (!vc) continue;
-    if (ov.maxEnergy != null && vc.maxEnergy) vc.maxEnergy.initialValue = ov.maxEnergy;
-    if (ov.hp != null && vc.maxHealth) vc.maxHealth.initialValue = ov.hp;
+  // 注意：GameData 里的角色定义是全局共享的，直接改会污染其它 profile，
+  // 因此这里做写时复制：只替换被覆盖的角色，并新建 Map。
+  let patched = data;
+  const ovEntries = Object.entries(options.fieldOverrides ?? {});
+  if (ovEntries.length > 0) {
+    const chars = new Map(data.characters);
+    for (const [idStr, ov] of ovEntries) {
+      const id = Number(idStr);
+      const ch = chars.get(id) as unknown as {
+        varConfigs?: Record<string, { initialValue?: number }>;
+      } | null;
+      const vc = ch?.varConfigs;
+      if (!ch || !vc) continue;
+      const nextVarConfigs = { ...vc };
+      if (ov.maxEnergy != null && vc.maxEnergy) {
+        nextVarConfigs.maxEnergy = { ...vc.maxEnergy, initialValue: ov.maxEnergy };
+      }
+      if (ov.hp != null && vc.maxHealth) {
+        nextVarConfigs.maxHealth = { ...vc.maxHealth, initialValue: ov.hp };
+      }
+      chars.set(id, { ...(ch as object), varConfigs: nextVarConfigs } as never);
+    }
+    patched = { ...data, characters: chars } as typeof data;
   }
   return finishProfile(
     {
@@ -161,7 +175,7 @@ export function customProfile(
         officialDeckCompatible,
       },
     },
-    data,
+    patched,
   );
 }
 
