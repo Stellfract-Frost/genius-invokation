@@ -196,6 +196,11 @@ export function customProfile(
             id: Number(id),
             ...ov,
           })),
+          // 技能费用覆盖（如魔偶剑鬼 25013 改回 3 风骰）也要给前端
+          ...Object.entries(PLAYCOST_OVERRIDE).map(([id, playCost]) => ({
+            id: Number(id),
+            playCost,
+          })),
         ],
         officialDeckCompatible,
       },
