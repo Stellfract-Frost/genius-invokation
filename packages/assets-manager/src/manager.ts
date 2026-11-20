@@ -103,6 +103,8 @@ export class AssetsManager {
   public readonly language: Language;
   private readonly dataCacheSync = new Map<number, AnyData>();
   private readonly dataCache = new Map<number, Promise<AnyData>>();
+  // 按实体钉版本的实体不能复用 prepareForSync 的 base 缓存
+  private readonly pinnedDataCache = new Map<number, Promise<AnyData>>();
   private readonly imageCacheSync = new Map<string, Blob>();
   private readonly imageCache = new Map<string, Promise<Blob>>();
   private readonly customDataNames = new Map<number, string>();
@@ -411,6 +413,21 @@ export class AssetsManager {
   async getData(id: number, options: GetDataOptions = {}): Promise<AnyData> {
     if (id < 0) {
       return this.getKeyword(-id, options);
+    }
+    // prepareForSync 缓存的是 $category/base 的数据；钉过版本的实体必须单独取，
+    // 否则技能/卡牌详情会显示 base 版本，而不是 versionMap 指定的版本。
+    const pinnedVersion = this.versionMap[id];
+    if (pinnedVersion !== undefined && !this.customDataNames.has(id)) {
+      const cached = this.pinnedDataCache.get(id);
+      if (cached) {
+        return cached;
+      }
+      const url = `${this.apiUrl}/datum/${pinnedVersion}/${this.options.language}/${id}`;
+      const promise = this.limitedFetch(url, FETCH_OPTION)
+        .then((r) => r.json())
+        .then((data) => this.applyDataOverride(data));
+      this.pinnedDataCache.set(id, promise);
+      return promise;
     }
     if (this.dataCacheSync.has(id)) {
       return this.dataCacheSync.get(id)!;
