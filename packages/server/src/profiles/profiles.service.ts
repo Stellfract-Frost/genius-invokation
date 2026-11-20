@@ -167,6 +167,40 @@ export class ProfilesService {
   }
 
   /**
+   * 集所长：本体取池内血量最高的版本，充能取池内最低值。
+   * 仅当池内确实存在更低充能的版本时才覆盖（否则不动，避免无意义的 override）。
+   */
+  private fieldOverrides(sorted: Version[]): Record<number, { maxEnergy?: number }> {
+    const baseIdx = VERSION_LIST.indexOf(sorted[sorted.length - 1] as never);
+    if (baseIdx < 0) return {};
+    const poolIdx = sorted
+      .map((v) => VERSION_LIST.indexOf(v as never))
+      .filter((i) => i >= 0);
+    const out: Record<number, { maxEnergy?: number }> = {};
+    for (const idStr of Object.keys(CHAR_BODY)) {
+      const id = Number(idStr);
+      const states = poolIdx
+        .map((i) => bodyAt(id, i))
+        .filter((x): x is [number, number] => x !== null);
+      if (states.length === 0) continue;
+      const minEnergy = Math.min(...states.map((s) => s[1]));
+      // 与 autoVersionMap 的本体选择保持同一规则：血量高 → 充能低 → 较新
+      let bestIdx = baseIdx;
+      if (!bodyAt(id, baseIdx)) bestIdx = poolIdx.find((i) => bodyAt(id, i)) ?? baseIdx;
+      for (const i of poolIdx) {
+        const s = bodyAt(id, i);
+        const b = bodyAt(id, bestIdx);
+        if (!s || !b) continue;
+        if (s[0] > b[0] || (s[0] === b[0] && s[1] < b[1])) bestIdx = i;
+      }
+      const chosen = bodyAt(id, bestIdx);
+      if (!chosen) continue;
+      if (minEnergy < chosen[1]) out[id] = { maxEnergy: minEnergy };
+    }
+    return out;
+  }
+
+  /**
    * 退化判定：整角色只取一个版本（用于依赖冲突、无法混版本时）。
    * 排序依据：效果优先（该角色技能描述数值和）→ 血量 → 较新版本。
    */
@@ -245,10 +279,16 @@ export class ProfilesService {
     );
     const baseVersion = sorted[sorted.length - 1];
     const name = `练习 ${sorted.map((v) => v.replace(/^v/, "")).join(" + ")}`;
+    const overrides = this.fieldOverrides(sorted);
     const build = (vm: Record<number, Version>) => {
       const pinTag = Object.keys(vm).length;
       const id = `practice/${sorted.join("-")}${pinTag ? `#${pinTag}` : ""}`;
-      return customProfile(baseVersion, { id, name, versionMap: vm });
+      return customProfile(baseVersion, {
+        id,
+        name,
+        versionMap: vm,
+        fieldOverrides: overrides,
+      });
     };
 
     let resolved =

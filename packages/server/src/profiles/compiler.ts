@@ -28,7 +28,6 @@ import {
 import getData from "@gi-tcg/data";
 import { analyzeResult } from "@gi-tcg/data-code-analyzer";
 import { CustomDataLoader } from "@gi-tcg/custom-data-loader";
-import { CHAR_OVERRIDE } from "./char-stats";
 import type { OverrideData } from "@gi-tcg/assets-manager";
 import type {
   CompiledProfile,
@@ -111,15 +110,13 @@ export function officialProfile(baseVersion: Version): CompiledProfile {
  *   （verifyDeckForProfile 会校验牌组版本不得高于 baseVersion）
  * - versionMap 用于把个别实体钉到池内另一个版本（强度按抽到的版本取）
  */
-/** 是否把恋雨杯 config 的字段级覆盖写入运行时数据。默认关闭：直接按抽到的版本取值。 */
-export const APPLY_LIANYU_FIELD_OVERRIDE = false;
-
 export function customProfile(
   baseVersion: Version,
   options: {
     id: string;
     name: string;
     versionMap?: Record<number, Version>;
+    fieldOverrides?: Record<number, { hp?: number; maxEnergy?: number }>;
   },
 ): CompiledProfile {
   const versionMap = options.versionMap ?? {};
@@ -136,12 +133,9 @@ export function customProfile(
     data,
     { officialDeckCompatible, customData = [], overrideData = [] },
   ] = loader.done();
-  // 恋雨杯 config 里的字段级覆盖（如甘雨/宵宫 maxEnergy=2）。
-  // 口径：直接使用"抽到的版本"的真实数据，不做覆盖（甘雨 12 血/3 充能、宵宫 10 血/3 充能）。
-  // 若要切回恋雨杯口径，把下面的开关改成 true 即可。
-  for (const [idStr, ov] of Object.entries(
-    APPLY_LIANYU_FIELD_OVERRIDE ? CHAR_OVERRIDE : {},
-  )) {
+  // 集所长的字段级覆盖：本体取池内血量最高的版本，充能取池内最低值。
+  // 例：池含 3.3（2 充能）+ 7.2（12 血）→ 12 血 / 2 充能。
+  for (const [idStr, ov] of Object.entries(options.fieldOverrides ?? {})) {
     const ch = data.characters.get(Number(idStr)) as unknown as {
       varConfigs?: Record<string, { initialValue?: number }>;
     } | null;
