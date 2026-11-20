@@ -28,6 +28,7 @@ import {
 import getData from "@gi-tcg/data";
 import { analyzeResult } from "@gi-tcg/data-code-analyzer";
 import { CustomDataLoader } from "@gi-tcg/custom-data-loader";
+import { PLAYCOST_OVERRIDE } from "./char-stats";
 import type { OverrideData } from "@gi-tcg/assets-manager";
 import type {
   CompiledProfile,
@@ -138,7 +139,8 @@ export function customProfile(
   // 因此这里做写时复制：只替换被覆盖的角色，并新建 Map。
   let patched = data;
   const ovEntries = Object.entries(options.fieldOverrides ?? {});
-  if (ovEntries.length > 0) {
+  const hasCostOverride = Object.keys(PLAYCOST_OVERRIDE).length > 0;
+  if (ovEntries.length > 0 || hasCostOverride) {
     const chars = new Map(data.characters);
     for (const [idStr, ov] of ovEntries) {
       const id = Number(idStr);
@@ -155,6 +157,18 @@ export function customProfile(
         nextVarConfigs.maxHealth = { ...vc.maxHealth, initialValue: ov.hp };
       }
       chars.set(id, { ...(ch as object), varConfigs: nextVarConfigs } as never);
+    }
+    if (hasCostOverride) {
+      for (const [cid, ch] of [...chars]) {
+        const list = (ch as unknown as { skills?: { id: number }[] }).skills;
+        if (!list?.some((sk) => PLAYCOST_OVERRIDE[sk.id])) continue;
+        const nextSkills = list.map((sk) =>
+          PLAYCOST_OVERRIDE[sk.id]
+            ? { ...sk, playCost: PLAYCOST_OVERRIDE[sk.id] }
+            : sk,
+        );
+        chars.set(cid, { ...(ch as object), skills: nextSkills } as never);
+      }
     }
     patched = { ...data, characters: chars } as typeof data;
   }
