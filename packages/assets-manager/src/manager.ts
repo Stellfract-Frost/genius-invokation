@@ -607,7 +607,12 @@ export class AssetsManager {
   }
 
   async getDeckData(): Promise<DeckData> {
-    if (this.options.officialDeckCompatible) {
+    // 静态牌组数据只对单一版本有效；合并版本池（按实体钉版本的 version map）
+    // 必须走动态数据，否则会拿到当前构建的全版本卡池。
+    if (
+      this.options.officialDeckCompatible &&
+      typeof this.options.version === "string"
+    ) {
       return getStaticDeckData();
     }
     await this.prepareForSync();
