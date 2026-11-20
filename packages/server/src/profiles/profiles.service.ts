@@ -204,7 +204,10 @@ export class ProfilesService {
    * 退化判定：整角色只取一个版本（用于依赖冲突、无法混版本时）。
    * 排序依据：效果优先（该角色技能描述数值和）→ 血量 → 较新版本。
    */
-  private coarseVersionMap(sorted: Version[]): Record<number, Version> {
+  private coarseVersionMap(
+    sorted: Version[],
+    includeSkills = true,
+  ): Record<number, Version> {
     const baseIdx = VERSION_LIST.indexOf(sorted[sorted.length - 1] as never);
     if (baseIdx < 0) return {};
     const poolIdx = sorted
@@ -251,7 +254,7 @@ export class ProfilesService {
       if (bestIdx !== baseIdx) map[id] = VERSION_LIST[bestIdx] as Version;
     }
     // 退化时仍保留恋雨杯的技能指定（其自身配置自洽，如夜兰 12093→4.6）
-    for (const idStr of Object.keys(SKILL_STATS)) {
+    for (const idStr of includeSkills ? Object.keys(SKILL_STATS) : []) {
       const id = Number(idStr);
       const pin = LIANYU_PIN[id];
       if (pin === undefined || !poolIdx.includes(pin)) continue;
@@ -298,22 +301,31 @@ export class ProfilesService {
       });
     };
 
-    let resolved =
-      versionMap && Object.keys(versionMap).length > 0
-        ? versionMap
-        : this.autoVersionMap(sorted);
-    let compiled: CompiledProfile;
-    try {
-      compiled = build(resolved);
-    } catch (err) {
-      // 细粒度混版本会撞依赖（例：吞星之鲸 本体 6.7 + 技能 4.8 → 122042 冲突）
-      // 退化为「整角色取一版」：效果优先 → 血量 → 较新；但保留恋雨杯的技能指定
-      console.warn(
-        `[practice] ${sorted.join("+")} 细粒度判定冲突，退化处理：`,
-        (err as Error).message?.split("\n")[0],
-      );
-      resolved = this.coarseVersionMap(sorted);
-      compiled = build(resolved);
+    const levels: { name: string; vm: () => Record<number, Version> }[] = [
+      { name: "细粒度(本体+技能+行动牌)", vm: () => (versionMap && Object.keys(versionMap).length > 0 ? versionMap : this.autoVersionMap(sorted)) },
+      { name: "整角色+恋雨杯技能+行动牌", vm: () => this.coarseVersionMap(sorted) },
+      { name: "整角色+行动牌", vm: () => this.coarseVersionMap(sorted, false) },
+      { name: "不钉版本(纯 base)", vm: () => ({}) },
+    ];
+    let compiled: CompiledProfile | null = null;
+    let lastErr: unknown = null;
+    for (const level of levels) {
+      try {
+        compiled = build(level.vm());
+        if (level !== levels[0]) {
+          console.warn(`[practice] ${sorted.join("+")} 降级为「${level.name}」`);
+        }
+        break;
+      } catch (err) {
+        lastErr = err;
+        console.warn(
+          `[practice] ${sorted.join("+")} 「${level.name}」冲突：`,
+          (err as Error).message?.split("\n")[0],
+        );
+      }
+    }
+    if (!compiled) {
+      throw lastErr instanceof Error ? lastErr : new Error("profile build failed");
     }
     const cached = this.profiles.get(compiled.profile.id);
     if (cached) {
