@@ -90,6 +90,20 @@ export default function EditDeck() {
     }
   };
 
+  // 新牌组保存后，把版本从 "new" 迁移到真实牌组 id，否则再打开就丢了
+  const migrateVersionStorage = (toId?: number) => {
+    if (!toId) return;
+    try {
+      const raw = localStorage.getItem("deck-versions:new");
+      if (raw) {
+        localStorage.setItem(`deck-versions:${toId}`, raw);
+        localStorage.removeItem("deck-versions:new");
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
   const togglePreviewVersion = (v: string) => {
     const cur = previewVersions();
     setPreviewVersions(cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v]);
@@ -267,9 +281,11 @@ export default function EditDeck() {
       setUploading(true);
       if (isNew) {
         if (type === "guest") {
-          await addGuestDeck(deckInfo);
+          const created = await addGuestDeck(deckInfo);
+          migrateVersionStorage((created as any)?.id);
         } else if (type === "user") {
-          await axios.post("decks", deckInfo);
+          const res = await axios.post("decks", deckInfo);
+          migrateVersionStorage((res.data as any)?.id);
         }
         setDirty(false);
       } else {
