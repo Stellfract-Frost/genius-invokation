@@ -73,6 +73,21 @@ export class ProfilesService {
     }
     return profile;
   }
+  /** 本体选版的唯一实现：恋雨杯指定优先，否则血量高→充能低→较新 */
+  private bodyChoice(id: number, poolIdx: number[], baseIdx: number): number | null {
+    const avail = poolIdx.filter((i) => bodyAt(id, i) !== null);
+    if (avail.length === 0) return null;
+    const pin = LIANYU_PIN[id];
+    if (pin !== undefined && avail.includes(pin)) return pin;
+    let bestIdx = avail.includes(baseIdx) ? baseIdx : avail[avail.length - 1];
+    for (const i of avail) {
+      const s = bodyAt(id, i)!;
+      const b = bodyAt(id, bestIdx)!;
+      if (s[0] > b[0] || (s[0] === b[0] && s[1] < b[1])) bestIdx = i;
+    }
+    return bestIdx;
+  }
+
   /**
    * 按 strength-rules.md 自动生成 versionMap。
    * 角色本体与技能是两个独立判定单元：
@@ -92,25 +107,12 @@ export class ProfilesService {
     const map: Record<number, Version> = {};
     const bodyBest = new Map<number, number>();
 
-    // ① 角色本体：生命↑、充能↓；恋雨杯指定版在池内时优先
+    // ① 角色本体：恋雨杯指定优先，否则 生命↑、充能↓
     for (const idStr of Object.keys(CHAR_BODY)) {
       const id = Number(idStr);
       if (!bodyAt(id, baseIdx)) continue;
-      const avail = poolIdx.filter((i) => bodyAt(id, i) !== null);
-      if (avail.length === 0) continue;
-      let bestIdx = baseIdx;
-      const pin = LIANYU_PIN[id];
-      if (pin !== undefined && avail.includes(pin)) {
-        bestIdx = pin;
-      } else {
-        for (const i of avail) {
-          const s = bodyAt(id, i)!;
-          const b = bodyAt(id, bestIdx)!;
-          if (s[0] > b[0] || (s[0] === b[0] && s[1] < b[1])) {
-            bestIdx = i;
-          }
-        }
-      }
+      const bestIdx = this.bodyChoice(id, poolIdx, baseIdx);
+      if (bestIdx === null) continue;
       bodyBest.set(id, bestIdx);
       if (bestIdx !== baseIdx) map[id] = VERSION_LIST[bestIdx] as Version;
     }
@@ -184,15 +186,8 @@ export class ProfilesService {
         .filter((x): x is [number, number] => x !== null);
       if (states.length === 0) continue;
       const minEnergy = Math.min(...states.map((s) => s[1]));
-      // 与 autoVersionMap 的本体选择保持同一规则：血量高 → 充能低 → 较新
-      let bestIdx = baseIdx;
-      if (!bodyAt(id, baseIdx)) bestIdx = poolIdx.find((i) => bodyAt(id, i)) ?? baseIdx;
-      for (const i of poolIdx) {
-        const s = bodyAt(id, i);
-        const b = bodyAt(id, bestIdx);
-        if (!s || !b) continue;
-        if (s[0] > b[0] || (s[0] === b[0] && s[1] < b[1])) bestIdx = i;
-      }
+      const bestIdx = this.bodyChoice(id, poolIdx, baseIdx);
+      if (bestIdx === null) continue;
       const chosen = bodyAt(id, bestIdx);
       if (!chosen) continue;
       if (minEnergy < chosen[1]) out[id] = { maxEnergy: minEnergy };
