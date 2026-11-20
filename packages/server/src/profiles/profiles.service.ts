@@ -20,6 +20,7 @@ import type { CompiledProfile } from "./types";
 import {
   CARD_PIN,
   CHAR_BODY,
+  CHAR_OVERRIDE,
   LIANYU_PIN,
   SKILL_OWNER,
   SKILL_STATS,
@@ -79,8 +80,22 @@ export class ProfilesService {
     if (avail.length === 0) return null;
     const pin = LIANYU_PIN[id];
     if (pin !== undefined && avail.includes(pin)) return pin;
-    let bestIdx = avail.includes(baseIdx) ? baseIdx : avail[avail.length - 1];
-    for (const i of avail) {
+    // 恋雨杯指定版不在池内时，只允许“不高于有效上限”的本体：
+    // 生命不更高、充能不更低。CHAR_OVERRIDE 是恋雨杯的字段覆盖（甘雨/宵宫）。
+    const pinBody = pin !== undefined ? bodyAt(id, pin) : null;
+    const override = CHAR_OVERRIDE[id];
+    const capHp = override?.hp ?? pinBody?.[0];
+    const capEnergy = override?.maxEnergy ?? pinBody?.[1];
+    const candidates =
+      capHp !== undefined && capEnergy !== undefined
+        ? avail.filter((i) => {
+            const s = bodyAt(id, i)!;
+            return s[0] <= capHp && s[1] >= capEnergy;
+          })
+        : avail;
+    const pool = candidates.length > 0 ? candidates : avail;
+    let bestIdx = pool.includes(baseIdx) ? baseIdx : pool[pool.length - 1];
+    for (const i of pool) {
       const s = bodyAt(id, i)!;
       const b = bodyAt(id, bestIdx)!;
       if (s[0] > b[0] || (s[0] === b[0] && s[1] < b[1])) bestIdx = i;
@@ -130,8 +145,28 @@ export class ProfilesService {
       if (pin !== undefined && avail.includes(pin)) {
         bestIdx = pin;
       } else {
-        let bestScore = base[1];
-        for (const i of avail) {
+        // 恋雨杯指定版不在池内时，只能取“不高于它”的候选：
+        // 文本相同（同一效果）或描述数值和更低（更弱）。
+        // 不能因为池里没有指定版，就取一个更强的版本来突破上限。
+        const candidates = (() => {
+          if (pin === undefined) {
+            return avail;
+          }
+          const pinStat = skillAt(id, pin);
+          if (!pinStat) {
+            return avail;
+          }
+          const allowed = avail.filter((i) => {
+            const s = skillAt(id, i)!;
+            return s[0] === pinStat[0] || s[1] < pinStat[1];
+          });
+          return allowed.length > 0 ? allowed : avail;
+        })();
+        bestIdx = candidates.includes(baseIdx)
+          ? baseIdx
+          : candidates[candidates.length - 1];
+        let bestScore = skillAt(id, bestIdx)![1];
+        for (const i of candidates) {
           const s = skillAt(id, i)!;
           if (s[1] > bestScore || (s[1] === bestScore && i > bestIdx)) {
             bestScore = s[1];
@@ -195,7 +230,13 @@ export class ProfilesService {
       if (!chosen || !atBase) continue;
       // 前端按 base 版本的静态数据渲染，所以凡是"选中版本与 base 不同"的字段都要覆盖
       const ov: { hp?: number; maxEnergy?: number } = {};
-      const targetEnergy = Math.min(minEnergy, chosen[1]);
+      const pin = LIANYU_PIN[id];
+      const pinBody = pin !== undefined ? bodyAt(id, pin) : null;
+      const capEnergy = CHAR_OVERRIDE[id]?.maxEnergy ?? pinBody?.[1];
+      const targetEnergy =
+        capEnergy !== undefined
+          ? Math.max(minEnergy, capEnergy)
+          : Math.min(minEnergy, chosen[1]);
       if (targetEnergy !== atBase[1]) ov.maxEnergy = targetEnergy;
       if (chosen[0] !== atBase[0]) ov.hp = chosen[0];
       if (Object.keys(ov).length > 0) out[id] = ov;
@@ -241,9 +282,24 @@ export class ProfilesService {
       if (pin !== undefined && avail.includes(pin)) {
         bestIdx = pin;
       } else {
-        let bestScore = scoreOf(id, baseIdx);
-        let bestHp = bodyAt(id, baseIdx)![0];
-        for (const i of avail) {
+        const pinBody = pin !== undefined ? bodyAt(id, pin) : null;
+        const override = CHAR_OVERRIDE[id];
+        const capHp = override?.hp ?? pinBody?.[0];
+        const capEnergy = override?.maxEnergy ?? pinBody?.[1];
+        const capped =
+          capHp !== undefined && capEnergy !== undefined
+            ? avail.filter((i) => {
+                const s = bodyAt(id, i)!;
+                return s[0] <= capHp && s[1] >= capEnergy;
+              })
+            : avail;
+        const candidates = capped.length > 0 ? capped : avail;
+        bestIdx = candidates.includes(baseIdx)
+          ? baseIdx
+          : candidates[candidates.length - 1];
+        let bestScore = scoreOf(id, bestIdx);
+        let bestHp = bodyAt(id, bestIdx)![0];
+        for (const i of candidates) {
           const sc = scoreOf(id, i);
           const hp = bodyAt(id, i)![0];
           if (sc > bestScore || (sc === bestScore && hp > bestHp) ||
