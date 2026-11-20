@@ -283,7 +283,7 @@ export class ProfilesService {
       (a, b) => VERSIONS.indexOf(a as never) - VERSIONS.indexOf(b as never),
     );
     const baseVersion = sorted[sorted.length - 1];
-    const name = `练习 ${sorted.map((v) => v.replace(/^v/, "")).join(" + ")}`;
+    const name = `比赛版本 ${sorted.map((v) => v.replace(/^v/, "")).join(" + ")}`;
     const overrides = this.fieldOverrides(sorted);
     const build = (vm: Record<number, Version>) => {
       const pinTag = Object.keys(vm).length;

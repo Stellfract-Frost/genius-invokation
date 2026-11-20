@@ -24,11 +24,7 @@ import {
   onCleanup,
 } from "solid-js";
 import { VERSIONS } from "@gi-tcg/core";
-import {
-  fetchProfile,
-  type ProfileDetail,
-  type ProfileSummary,
-} from "../profiles";
+import type { ProfileSummary } from "../profiles";
 import { Layout } from "../layouts/Layout";
 import axios, { AxiosError } from "axios";
 import type { Deck } from "@gi-tcg/typings";
@@ -59,7 +55,7 @@ export default function EditDeck() {
   // 版本预览：可多选，按合并后的卡池渲染
   const [previewVersions, setPreviewVersions] = createSignal<string[]>([]);
   const [previewProfile, setPreviewProfile] = createSignal<ProfileSummary | null>(null);
-  const [previewDetail, setPreviewDetail] = createSignal<ProfileDetail | null>(null);
+  const [previewSingle, setPreviewSingle] = createSignal<string | null>(null);
   const [previewState, setPreviewState] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
   const togglePreviewVersion = (v: string) => {
     const cur = previewVersions();
@@ -79,16 +75,23 @@ export default function EditDeck() {
     const vs = previewVersions();
     if (vs.length === 0) {
       setPreviewProfile(null);
-      setPreviewDetail(null);
+      setPreviewSingle(null);
       setPreviewState("idle");
       return;
     }
+    // 单选 = 普通（直接用该版本的数据）；多选 = 比赛版本（合并卡池）
+    if (vs.length === 1) {
+      setPreviewProfile(null);
+      setPreviewSingle(vs[0]);
+      setPreviewState("ready");
+      return;
+    }
+    setPreviewSingle(null);
     setPreviewState("loading");
     const timer = setTimeout(async () => {
       try {
         const { data } = await axios.post<ProfileSummary>("profiles/merge", { versions: vs });
         setPreviewProfile(data);
-        setPreviewDetail(await fetchProfile(data));
         setPreviewState("ready");
       } catch {
         setPreviewState("error");
@@ -321,7 +324,9 @@ export default function EditDeck() {
               <Match when={previewState() === "loading"}>{t("loading")}</Match>
               <Match when={previewState() === "error"}>{t("loadFailed", { message: "" })}</Match>
               <Match when={previewState() === "ready"}>
-                {previewProfile()?.name} · base {previewProfile()?.baseVersion}
+                {previewProfile()
+                  ? `${previewProfile()!.name} · base ${previewProfile()!.baseVersion}`
+                  : `普通 · ${previewSingle() ?? ""}`}
               </Match>
               <Match when={true}>{t("deckVersionNone")}</Match>
             </Switch>
@@ -337,7 +342,7 @@ export default function EditDeck() {
           <Match when={status().type !== "notLogin"}>
             <DeckBuilder
               class={`h-[calc(100dvh-9rem)] @3xl:h-auto w-full flex-grow min-h-0`}
-              assetsManager={assetsManager(previewDetail() ?? undefined)}
+              assetsManager={assetsManager(previewProfile()?.baseVersion ?? previewSingle() ?? undefined)}
               locale={locale()}
               deck={deckValue()}
               onChangeDeck={(v) => (setDeckValue(v), setDirty(true))}
