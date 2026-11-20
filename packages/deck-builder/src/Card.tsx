@@ -66,40 +66,15 @@ export function Card(props: CardProps) {
       >
         <img src={BrowseIcon} draggable="false" class="w-35% h-auto" />
       </div>
-      {/* 窄屏：只保留一个小放大镜按钮，点卡片本体仍然是"选择"，不拦点击 */}
       <div
-        class="absolute right-2 top-2 z-100 @3xl:hidden"
-        onClick={(e) => {
+        class="absolute inset-0 z-100 bg-transparent @3xl:hidden"
+        onContextMenu={(e) => e.preventDefault()}
+        data-long-press-delay="400"
+        on:long-press={(e: CustomEvent) => {
           e.preventDefault();
-          e.stopPropagation();
           showCard(e, props.type, props.id);
         }}
-      >
-        <div class="w-7 h-7 rounded-full bg-gray-500/80 flex items-center justify-center">
-          <img src={BrowseIcon} draggable="false" class="w-4 h-4" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export interface PoolCardProps extends CardProps {
-  valid?: boolean;
-  partialSelected?: boolean;
-  selected?: boolean;
-  selectedCount?: number;
-}
-
-export function PoolCard(props: PoolCardProps) {
-  const { t } = useDeckBuilderContext();
-  return (
-    <div
-      class="pool-card w-full rounded-lg overflow-clip b-[var(--border-color)] b-2 relative"
-      bool:data-selected={props.selected}
-      bool:data-partial-selected={props.partialSelected}
-      bool:data-invalid={props.valid === false}
-    >
-      <Card id={props.id} type={props.type} />
+      />
       <Switch>
         <Match when={props.valid === false}>
           <div
