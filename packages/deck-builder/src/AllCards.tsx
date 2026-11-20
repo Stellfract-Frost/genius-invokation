@@ -24,6 +24,7 @@ export interface AllCardsProps extends DeckData {
   deck: Deck;
   version: number;
   versionSpecified?: boolean;
+  hideVersionSelect?: boolean;
   onChangeDeck?: (deck: Deck) => void;
   onSwitchTab?: (tab: number) => void;
   onSetVersion?: (version: number) => void;
@@ -56,6 +57,7 @@ export function AllCards(props: AllCardsProps) {
         >
           {t("actionCards")}
         </button>
+        <Show when={!props.hideVersionSelect}>
         <Show
           when={!props.versionSpecified}
           fallback={
@@ -77,6 +79,7 @@ export function AllCards(props: AllCardsProps) {
               )}
             </Index>
           </select>
+        </Show>
         </Show>
       </div>
       <div class="min-h-0">

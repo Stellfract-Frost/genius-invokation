@@ -46,6 +46,8 @@ export interface DeckBuilderProps extends JSX.HTMLAttributes<HTMLDivElement> {
   assetsManager?: AssetsManager;
   deck?: Deck;
   version?: string;
+  /** 隐藏内置的版本下拉（由外部自带的版本选择器接管） */
+  hideVersionSelect?: boolean;
   onChangeDeck?: (deck: Deck) => void;
   locale?: Locale;
 }
@@ -166,7 +168,7 @@ export function DeckBuilder(props: DeckBuilderProps) {
             </Match>
             <Match when={deckData()}>
               {(deckData) => (
-                <AllCards
+                <AllCards hideVersionSelect={props.hideVersionSelect}
                   version={version()}
                   versionSpecified={versionSpecified()}
                   deck={props.deck ?? EMPTY_DECK}

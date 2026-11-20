@@ -70,6 +70,12 @@ export function Card(props: CardProps) {
         class="absolute inset-0 z-100 bg-transparent @3xl:hidden"
         onContextMenu={(e) => e.preventDefault()}
         data-long-press-delay="400"
+        onClick={(e) => {
+          // 窄屏（手机）：轻点即可查看详情，长按同样有效
+          e.preventDefault();
+          e.stopPropagation();
+          showCard(e, props.type, props.id);
+        }}
         on:long-press={(e: CustomEvent) => {
           e.preventDefault();
           showCard(e, props.type, props.id);
