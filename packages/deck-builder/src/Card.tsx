@@ -75,6 +75,27 @@ export function Card(props: CardProps) {
           showCard(e, props.type, props.id);
         }}
       />
+    </div>
+  );
+}
+
+export interface PoolCardProps extends CardProps {
+  valid?: boolean;
+  partialSelected?: boolean;
+  selected?: boolean;
+  selectedCount?: number;
+}
+
+export function PoolCard(props: PoolCardProps) {
+  const { t } = useDeckBuilderContext();
+  return (
+    <div
+      class="pool-card w-full rounded-lg overflow-clip b-[var(--border-color)] b-2 relative"
+      bool:data-selected={props.selected}
+      bool:data-partial-selected={props.partialSelected}
+      bool:data-invalid={props.valid === false}
+    >
+      <Card id={props.id} type={props.type} />
       <Switch>
         <Match when={props.valid === false}>
           <div
