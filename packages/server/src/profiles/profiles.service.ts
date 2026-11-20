@@ -426,9 +426,21 @@ export class ProfilesService {
   }
 
   list() {
+    const all = [...this.profiles.values()];
+    // 练习/比赛合并 profile 是临时缓存，历史上每换一次版本池就会多一个；
+    // 规则配置里只保留最后创建的那个“比赛版本”，其余仍可按 id 访问。
+    const lastPractice = all
+      .filter(({ summary }) => summary.id.startsWith("practice/"))
+      .at(-1);
+    const visible = lastPractice
+      ? all.filter(
+          (p) =>
+            p === lastPractice || !p.summary.id.startsWith("practice/"),
+        )
+      : all;
     return {
       defaultProfileId: this.defaultProfileId,
-      profiles: [...this.profiles.values()].map(({ summary }) => summary),
+      profiles: visible.map(({ summary }) => summary),
     };
   }
 }
