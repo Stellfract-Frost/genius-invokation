@@ -186,7 +186,8 @@ export function customProfile(
       versionMap,
       mods: [],
       assets: {
-        version: baseVersion,
+        // 逐实体版本映射：前端据此按实体版本渲染角色/技能/卡牌，而不是只按 base 显示
+        version: { ...resolver.versionMap },
         customData,
         // 字段级覆盖（如集所长压低的充能）必须一起下发，否则前端仍按静态数据显示
         overrideData: [
