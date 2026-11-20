@@ -407,7 +407,6 @@ export default function EditDeck() {
             <DeckBuilder
               class={`h-[calc(100dvh-9rem)] @3xl:h-auto w-full flex-grow min-h-0`}
               assetsManager={assetsManager(previewDetail() ?? previewSingle() ?? undefined)}
-              hideVersionSelect
               locale={locale()}
               deck={deckValue()}
               onChangeDeck={(v) => (setDeckValue(v), setDirty(true))}
