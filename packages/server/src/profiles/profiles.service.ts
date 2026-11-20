@@ -172,13 +172,15 @@ export class ProfilesService {
    * 集所长：本体取池内血量最高的版本，充能取池内最低值。
    * 仅当池内确实存在更低充能的版本时才覆盖（否则不动，避免无意义的 override）。
    */
-  private fieldOverrides(sorted: Version[]): Record<number, { maxEnergy?: number }> {
+  private fieldOverrides(
+    sorted: Version[],
+  ): Record<number, { hp?: number; maxEnergy?: number }> {
     const baseIdx = VERSION_LIST.indexOf(sorted[sorted.length - 1] as never);
     if (baseIdx < 0) return {};
     const poolIdx = sorted
       .map((v) => VERSION_LIST.indexOf(v as never))
       .filter((i) => i >= 0);
-    const out: Record<number, { maxEnergy?: number }> = {};
+    const out: Record<number, { hp?: number; maxEnergy?: number }> = {};
     for (const idStr of Object.keys(CHAR_BODY)) {
       const id = Number(idStr);
       const states = poolIdx
@@ -189,8 +191,14 @@ export class ProfilesService {
       const bestIdx = this.bodyChoice(id, poolIdx, baseIdx);
       if (bestIdx === null) continue;
       const chosen = bodyAt(id, bestIdx);
-      if (!chosen) continue;
-      if (minEnergy < chosen[1]) out[id] = { maxEnergy: minEnergy };
+      const atBase = bodyAt(id, baseIdx);
+      if (!chosen || !atBase) continue;
+      // 前端按 base 版本的静态数据渲染，所以凡是"选中版本与 base 不同"的字段都要覆盖
+      const ov: { hp?: number; maxEnergy?: number } = {};
+      const targetEnergy = Math.min(minEnergy, chosen[1]);
+      if (targetEnergy !== atBase[1]) ov.maxEnergy = targetEnergy;
+      if (chosen[0] !== atBase[0]) ov.hp = chosen[0];
+      if (Object.keys(ov).length > 0) out[id] = ov;
     }
     return out;
   }
