@@ -28,6 +28,7 @@ import {
 import getData from "@gi-tcg/data";
 import { analyzeResult } from "@gi-tcg/data-code-analyzer";
 import { CustomDataLoader } from "@gi-tcg/custom-data-loader";
+import { DiceType } from "@gi-tcg/typings";
 import { PLAYCOST_OVERRIDE } from "./char-stats";
 import { createPracticeResolver } from "./practice-resolver";
 import type { OverrideData } from "@gi-tcg/assets-manager";
@@ -142,7 +143,57 @@ export function customProfile(
   // 因此这里做写时复制：只替换被覆盖的角色，并新建 Map。
   let patched = data;
   const ovEntries = Object.entries(options.fieldOverrides ?? {});
-  const hasCostOverride = Object.keys(PLAYCOST_OVERRIDE).length > 0;
+  type RawPlayCost = { type: string; count: number }[];
+  type RawSkill = {
+    id: number;
+    skillType: string | null;
+    playCost?: RawPlayCost;
+    initiativeSkillConfig?: {
+      requiredCost: ReadonlyMap<DiceType, number>;
+    };
+  };
+  const diceCostType: Record<number, string> = {
+    [DiceType.Void]: "GCG_COST_DICE_VOID",
+    [DiceType.Cryo]: "GCG_COST_DICE_CRYO",
+    [DiceType.Hydro]: "GCG_COST_DICE_HYDRO",
+    [DiceType.Pyro]: "GCG_COST_DICE_PYRO",
+    [DiceType.Electro]: "GCG_COST_DICE_ELECTRO",
+    [DiceType.Anemo]: "GCG_COST_DICE_ANEMO",
+    [DiceType.Geo]: "GCG_COST_DICE_GEO",
+    [DiceType.Dendro]: "GCG_COST_DICE_DENDRO",
+    [DiceType.Omni]: "GCG_COST_DICE_SAME",
+    [DiceType.Aligned]: "GCG_COST_DICE_ALIGNED",
+    [DiceType.Energy]: "GCG_COST_ENERGY",
+    [DiceType.Legend]: "GCG_COST_LEGEND",
+  };
+  // 费用覆盖：除了固定规则（如魔偶剑鬼），充能被压低的角色，其爆发费用也要
+  // 跟着降到同一个值，否则会出现「面板 2 充能、大招仍要 3 充能」。
+  const costOverrides: Record<number, RawPlayCost> = {
+    ...PLAYCOST_OVERRIDE,
+  };
+  const skillCostPatches = new Map<number, ReadonlyMap<DiceType, number>>();
+  for (const [idStr, ov] of ovEntries) {
+    const maxEnergy = ov.maxEnergy;
+    if (maxEnergy == null) continue;
+    const ch = data.characters.get(Number(idStr)) as unknown as {
+      skills?: RawSkill[];
+    } | null;
+    for (const sk of ch?.skills ?? []) {
+      if (sk.skillType !== "burst" || costOverrides[sk.id]) continue;
+      const requiredCost = sk.initiativeSkillConfig?.requiredCost;
+      const energy = requiredCost?.get(DiceType.Energy);
+      if (!requiredCost || energy === undefined) continue;
+      const nextCost = new Map(requiredCost);
+      nextCost.set(DiceType.Energy, Math.min(energy, maxEnergy));
+      skillCostPatches.set(sk.id, nextCost);
+      costOverrides[sk.id] = [...nextCost].map(([type, count]) => ({
+        type: diceCostType[type] ?? String(type),
+        count,
+      }));
+    }
+  }
+  const hasCostOverride =
+    Object.keys(costOverrides).length > 0 || skillCostPatches.size > 0;
   if (ovEntries.length > 0 || hasCostOverride) {
     const chars = new Map(data.characters);
     for (const [idStr, ov] of ovEntries) {
@@ -163,13 +214,30 @@ export function customProfile(
     }
     if (hasCostOverride) {
       for (const [cid, ch] of [...chars]) {
-        const list = (ch as unknown as { skills?: { id: number }[] }).skills;
-        if (!list?.some((sk) => PLAYCOST_OVERRIDE[sk.id])) continue;
-        const nextSkills = list.map((sk) =>
-          PLAYCOST_OVERRIDE[sk.id]
-            ? { ...sk, playCost: PLAYCOST_OVERRIDE[sk.id] }
-            : sk,
-        );
+        const list = (ch as unknown as { skills?: RawSkill[] }).skills;
+        if (
+          !list?.some(
+            (sk) => skillCostPatches.has(sk.id) || PLAYCOST_OVERRIDE[sk.id],
+          )
+        ) {
+          continue;
+        }
+        const nextSkills = list.map((sk) => {
+          const nextCost = skillCostPatches.get(sk.id);
+          if (nextCost) {
+            return {
+              ...sk,
+              initiativeSkillConfig: {
+                ...sk.initiativeSkillConfig,
+                requiredCost: nextCost,
+              },
+            };
+          }
+          if (PLAYCOST_OVERRIDE[sk.id]) {
+            return { ...sk, playCost: PLAYCOST_OVERRIDE[sk.id] };
+          }
+          return sk;
+        });
         chars.set(cid, { ...(ch as object), skills: nextSkills } as never);
       }
     }
@@ -196,8 +264,8 @@ export function customProfile(
             id: Number(id),
             ...ov,
           })),
-          // 技能费用覆盖（如魔偶剑鬼 25013 改回 3 风骰）也要给前端
-          ...Object.entries(PLAYCOST_OVERRIDE).map(([id, playCost]) => ({
+          // 技能费用覆盖（如魔偶剑鬼 25013 改回 3 风骰，或充能降低后的爆发）
+          ...Object.entries(costOverrides).map(([id, playCost]) => ({
             id: Number(id),
             playCost,
           })),
