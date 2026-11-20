@@ -378,6 +378,11 @@ export default function EditDeck() {
               )}
             </For>
           </div>
+          <Show when={previewVersions().length > 0}>
+            <div class="text-3 mt-2">
+              本牌组版本：<span class="font-bold">{previewVersions().join(" / ")}</span>
+            </div>
+          </Show>
           <div class="text-3 mt-2 opacity-70">
             <Switch>
               <Match when={previewState() === "loading"}>{t("loading")}</Match>
