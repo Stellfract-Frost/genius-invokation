@@ -48,6 +48,8 @@ export interface DeckBuilderProps extends JSX.HTMLAttributes<HTMLDivElement> {
   version?: string;
   /** 隐藏内置的版本下拉（由外部自带的版本选择器接管） */
   hideVersionSelect?: boolean;
+  /** 规则禁止使用的角色（行动牌不受限） */
+  characterBlacklist?: readonly number[];
   onChangeDeck?: (deck: Deck) => void;
   locale?: Locale;
 }
@@ -169,6 +171,7 @@ export function DeckBuilder(props: DeckBuilderProps) {
             <Match when={deckData()}>
               {(deckData) => (
                 <AllCards hideVersionSelect={props.hideVersionSelect}
+                  characterBlacklist={props.characterBlacklist}
                   version={version()}
                   versionSpecified={versionSpecified()}
                   deck={props.deck ?? EMPTY_DECK}

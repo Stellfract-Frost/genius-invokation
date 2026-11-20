@@ -411,6 +411,7 @@ export default function EditDeck() {
               class={`h-[calc(100dvh-9rem)] @3xl:h-auto w-full flex-grow min-h-0`}
               assetsManager={assetsManager(previewDetail() ?? previewSingle() ?? undefined)}
               hideVersionSelect
+              characterBlacklist={previewDetail()?.deck?.blacklist}
               locale={locale()}
               deck={deckValue()}
               onChangeDeck={(v) => (setDeckValue(v), setDirty(true))}

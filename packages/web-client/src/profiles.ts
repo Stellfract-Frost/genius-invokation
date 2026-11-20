@@ -28,6 +28,11 @@ export interface ProfileDetail extends ProfileSummary {
     AssetsManagerOption,
     "version" | "customData" | "overrideData" | "officialDeckCompatible"
   >;
+  deck?: {
+    whitelist?: number[];
+    blacklist?: number[];
+    allowNewerCards?: boolean;
+  };
 }
 export interface ProfileList {
   defaultProfileId: string;

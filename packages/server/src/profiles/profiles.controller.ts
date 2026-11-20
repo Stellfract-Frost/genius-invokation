@@ -35,8 +35,8 @@ export const ProfilesController = new Hono()
   })
   .get("/:id", (c) => {
     const {
-      profile: { assets },
+      profile: { assets, deck },
       summary,
     } = profilesService.get(c.req.param("id"));
-    return c.json({ ...summary, assets });
+    return c.json({ ...summary, assets, deck });
   });

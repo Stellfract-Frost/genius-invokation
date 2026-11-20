@@ -180,11 +180,9 @@ export class ProfilesService {
       }
     }
 
-    // ③ 行动牌：完全采用恋雨杯的指定版本（池内有才生效），不做数值比较
+    // ③ 行动牌：完全采用恋雨杯的指定版本，不受抽选版本限制
     for (const [idStr, pinIdx] of Object.entries(CARD_PIN)) {
-      if (poolIdx.includes(pinIdx)) {
-        map[Number(idStr)] = VERSION_LIST[pinIdx] as Version;
-      }
+      map[Number(idStr)] = VERSION_LIST[pinIdx] as Version;
     }
 
     // ④ 防止依赖传播把本体版本拉低：
@@ -319,11 +317,9 @@ export class ProfilesService {
       if (pin === undefined || !poolIdx.includes(pin)) continue;
       if (pin !== baseIdx) map[id] = VERSION_LIST[pin] as Version;
     }
-    // 行动牌照样按恋雨杯钉（与角色判定无关）
+    // 行动牌照样按恋雨杯钉（与角色判定/抽选版本无关）
     for (const [idStr, pinIdx] of Object.entries(CARD_PIN)) {
-      if (poolIdx.includes(pinIdx)) {
-        map[Number(idStr)] = VERSION_LIST[pinIdx] as Version;
-      }
+      map[Number(idStr)] = VERSION_LIST[pinIdx] as Version;
     }
     return map;
   }
@@ -347,6 +343,13 @@ export class ProfilesService {
       (a, b) => VERSIONS.indexOf(a as never) - VERSIONS.indexOf(b as never),
     );
     const baseVersion = sorted[sorted.length - 1];
+    const selectedMaxIdx = VERSION_LIST.indexOf(baseVersion as never);
+    // 角色只允许抽到的版本为止；行动牌不受版本限制，所以数据加载到当前版本，
+    // 再用 blacklist 挡住抽选最高版之后才登场的角色。
+    const dataVersion = CURRENT_VERSION;
+    const characterBlacklist = Object.keys(CHAR_BODY)
+      .map(Number)
+      .filter((id) => CHAR_BODY[id]![0]![0] > selectedMaxIdx);
     const name = "比赛版本";
     const overrides = this.fieldOverrides(sorted);
     const build = (vm: Record<number, Version>) => {
@@ -355,8 +358,13 @@ export class ProfilesService {
       return customProfile(baseVersion, {
         id,
         name,
+        dataVersion,
         versionMap: vm,
         fieldOverrides: overrides,
+        deck: {
+          blacklist: characterBlacklist,
+          allowNewerCards: true,
+        },
       });
     };
 

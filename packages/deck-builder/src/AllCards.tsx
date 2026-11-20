@@ -25,6 +25,7 @@ export interface AllCardsProps extends DeckData {
   version: number;
   versionSpecified?: boolean;
   hideVersionSelect?: boolean;
+  characterBlacklist?: readonly number[];
   onChangeDeck?: (deck: Deck) => void;
   onSwitchTab?: (tab: number) => void;
   onSetVersion?: (version: number) => void;

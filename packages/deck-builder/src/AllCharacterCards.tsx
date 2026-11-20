@@ -83,7 +83,11 @@ export function AllCharacterCards(props: AllCardsProps) {
   // 当前版本不包含的角色自动下掉；其天赋牌由行动牌侧的合法性检查连带移除
   createEffect(() => {
     const characters = props.deck.characters;
-    const available = characters.filter((id) => props.characters.has(id));
+    const available = characters.filter(
+      (id) =>
+        props.characters.has(id) &&
+        !props.characterBlacklist?.includes(id),
+    );
     if (available.length !== characters.length) {
       props.onChangeDeck?.({
         ...props.deck,
@@ -135,7 +139,13 @@ export function AllCharacterCards(props: AllCardsProps) {
         ]}
       />
       <ul class="flex-grow overflow-auto grid grid-cols-[repeat(auto-fill,minmax(60px,1fr))] gap-2 pb-2 @3xl:pb-0 [scrollbar-width:thin]">
-        <Key each={props.characters.values().toArray()} by="id">
+        <Key
+          each={props.characters
+            .values()
+            .filter((ch) => !props.characterBlacklist?.includes(ch.id))
+            .toArray()}
+          by="id"
+        >
           {(ch) => (
             <li
               class="hidden data-[shown]-block relative cursor-pointer data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60 data-[disabled]:filter-none hover:brightness-110 transition-all"

@@ -37,6 +37,7 @@ import type {
   ModSource,
   Preset,
   Profile,
+  ProfileDeckConfig,
   ProfileGameConfig,
 } from "./types";
 import { loadReference } from "./reference";
@@ -118,15 +119,20 @@ export function customProfile(
   options: {
     id: string;
     name: string;
+    /** 实际加载数据的版本；行动牌池可以高于规则 base。 */
+    dataVersion?: Version;
     versionMap?: Record<number, Version>;
     fieldOverrides?: Record<number, { hp?: number; maxEnergy?: number }>;
+    deck?: ProfileDeckConfig;
   },
 ): CompiledProfile {
   const versionMap = options.versionMap ?? {};
+  const rulesVersion = baseVersion;
+  const dataVersion = options.dataVersion ?? rulesVersion;
   // 必须走 resolver + CustomDataLoader，否则 versionMap 不会作用到实际数据上
   // （与 compilePreset 保持同一条链路）
   // 用自定义 resolver：允许"本体取新、技能取旧"的跨版本组合（官方实现会直接抛冲突）
-  const resolver = createPracticeResolver(baseVersion, versionMap, analyzeResult);
+  const resolver = createPracticeResolver(dataVersion, versionMap, analyzeResult);
   if (resolver.log.conflicts.length > 0) {
     console.warn(
       `[practice] ${options.id} 依赖冲突 ${resolver.log.conflicts.length} 处（已按旧版本保留）`,
@@ -247,15 +253,16 @@ export function customProfile(
     {
       id: options.id,
       name: options.name,
-      baseVersion,
+      baseVersion: rulesVersion,
       officialDeckCompatible: true,
       gameConfig: { ...DEFAULT_GAME_CONFIG },
-      versionBehavior: getVersionBehavior(baseVersion),
+      versionBehavior: getVersionBehavior(rulesVersion),
       versionMap,
       mods: [],
+      ...(options.deck ? { deck: options.deck } : {}),
       assets: {
         // 逐实体版本映射：前端据此按实体版本渲染角色/技能/卡牌，而不是只按 base 显示
-        version: { ...resolver.versionMap, $category: baseVersion },
+        version: { ...resolver.versionMap, $category: dataVersion },
         customData,
         // 字段级覆盖（如集所长压低的充能）必须一起下发，否则前端仍按静态数据显示
         overrideData: [

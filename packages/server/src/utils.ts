@@ -159,13 +159,13 @@ export async function verifyDeckForProfile(
   profile: CompiledProfile,
 ) {
   const version = await verifyDeck(deck);
-  if (semverCompare(version, profile.profile.baseVersion) > 0) {
+  const { whitelist, blacklist, allowNewerCards } = profile.profile.deck ?? {};
+  if (!allowNewerCards && semverCompare(version, profile.profile.baseVersion) > 0) {
     throw new DeckVerificationError(
       DeckVerificationErrorCode.VersionError,
       `Deck version required ${version}, it's higher game version ${profile.profile.baseVersion}`,
     );
   }
-  const { whitelist, blacklist } = profile.profile.deck ?? {};
   const ids = [...deck.characters, ...deck.cards];
   if (whitelist && ids.some((id) => !whitelist.includes(id))) {
     throw new DeckVerificationError(
@@ -184,10 +184,12 @@ export async function verifyDeckForProfile(
 export function buildDeckMatchesProfileDbFilter(profile: CompiledProfile) {
   const {
     baseVersion,
-    deck: { whitelist, blacklist } = {},
+    deck: { whitelist, blacklist, allowNewerCards } = {},
   } = profile.profile;
   return and(
-    lte(decks.requiredVersion, VERSIONS.indexOf(baseVersion)),
+    allowNewerCards
+      ? void 0
+      : lte(decks.requiredVersion, VERSIONS.indexOf(baseVersion)),
     whitelist
       ? sql`(${decks.characters} || ${decks.cards}) <@ ${JSON.stringify(whitelist)}::jsonb`
       : void 0,

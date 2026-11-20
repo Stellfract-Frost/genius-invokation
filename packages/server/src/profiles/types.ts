@@ -39,6 +39,8 @@ export interface PluginContext {
 export interface ProfileDeckConfig {
   blacklist?: number[];
   whitelist?: number[];
+  /** 合并池：行动牌不受抽选版本限制，只校验角色黑名单。 */
+  allowNewerCards?: boolean;
 }
 
 export interface Profile {
