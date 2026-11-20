@@ -164,10 +164,12 @@ export default function EditDeck() {
     if (deckInfo) {
       setDeckValue(unwrap(deckInfo));
       setDeckName(deckInfo.name);
-      const savedVersions = deckInfo.versions?.filter((version) =>
-        VERSIONS.includes(version as never),
+      // 服务端空数组不能覆盖本地已选版本：它可能只是"上次保存时还没选版本"，
+      // 而本地记录的是用户随后选过、但尚未保存的版本。
+      const savedVersions = deckInfo.versions?.filter(
+        (version) => VERSIONS.includes(version as never),
       );
-      if (savedVersions) {
+      if (savedVersions && savedVersions.length > 0) {
         setPreviewVersions(savedVersions);
       }
       setSearchParams({ name: null }, { replace: true });
