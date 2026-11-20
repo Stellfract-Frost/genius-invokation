@@ -29,6 +29,7 @@ import getData from "@gi-tcg/data";
 import { analyzeResult } from "@gi-tcg/data-code-analyzer";
 import { CustomDataLoader } from "@gi-tcg/custom-data-loader";
 import { PLAYCOST_OVERRIDE } from "./char-stats";
+import { createPracticeResolver } from "./practice-resolver";
 import type { OverrideData } from "@gi-tcg/assets-manager";
 import type {
   CompiledProfile,
@@ -123,13 +124,15 @@ export function customProfile(
   const versionMap = options.versionMap ?? {};
   // 必须走 resolver + CustomDataLoader，否则 versionMap 不会作用到实际数据上
   // （与 compilePreset 保持同一条链路）
-  const resolver = createOfficialVersionResolver(
-    baseVersion,
-    versionMap,
-    analyzeResult,
-  );
+  // 用自定义 resolver：允许"本体取新、技能取旧"的跨版本组合（官方实现会直接抛冲突）
+  const resolver = createPracticeResolver(baseVersion, versionMap, analyzeResult);
+  if (resolver.log.conflicts.length > 0) {
+    console.warn(
+      `[practice] ${options.id} 依赖冲突 ${resolver.log.conflicts.length} 处（已按旧版本保留）`,
+    );
+  }
   const loader = new CustomDataLoader();
-  loader.setVersion(resolver);
+  loader.setVersion(resolver as never);
   const [
     data,
     { officialDeckCompatible, customData = [], overrideData = [] },
@@ -183,7 +186,7 @@ export function customProfile(
       versionMap,
       mods: [],
       assets: {
-        version: { ...resolver.versionMap },
+        version: baseVersion,
         customData,
         overrideData,
         officialDeckCompatible,
