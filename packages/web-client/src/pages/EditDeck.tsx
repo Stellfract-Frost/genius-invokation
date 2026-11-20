@@ -25,7 +25,11 @@ import {
   onMount,
 } from "solid-js";
 import { VERSIONS } from "@gi-tcg/core";
-import type { ProfileSummary } from "../profiles";
+import {
+  fetchProfile,
+  type ProfileDetail,
+  type ProfileSummary,
+} from "../profiles";
 import { Layout } from "../layouts/Layout";
 import axios, { AxiosError } from "axios";
 import type { Deck } from "@gi-tcg/typings";
@@ -57,6 +61,7 @@ export default function EditDeck() {
   const [previewVersions, setPreviewVersions] = createSignal<string[]>([]);
   const [previewProfile, setPreviewProfile] = createSignal<ProfileSummary | null>(null);
   const [previewSingle, setPreviewSingle] = createSignal<string | null>(null);
+  const [previewDetail, setPreviewDetail] = createSignal<ProfileDetail | null>(null);
   const [previewState, setPreviewState] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
   // 版本随牌组记忆：同一牌组再次打开时回填
   const versionKey = () => `deck-versions:${params.id ?? "new"}`;
@@ -115,12 +120,14 @@ export default function EditDeck() {
     if (vs.length === 0) {
       setPreviewProfile(null);
       setPreviewSingle(null);
+      setPreviewDetail(null);
       setPreviewState("idle");
       return;
     }
     // 单选 = 普通（直接用该版本的数据）；多选 = 比赛版本（合并卡池）
     if (vs.length === 1) {
       setPreviewProfile(null);
+      setPreviewDetail(null);
       setPreviewSingle(vs[0]);
       setPreviewState("ready");
       pruneByVersion(vs[0]);
@@ -132,6 +139,7 @@ export default function EditDeck() {
       try {
         const { data } = await axios.post<ProfileSummary>("profiles/merge", { versions: vs });
         setPreviewProfile(data);
+        setPreviewDetail(await fetchProfile(data));
         setPreviewState("ready");
         pruneByVersion(data.baseVersion);
       } catch {
@@ -393,7 +401,7 @@ export default function EditDeck() {
           <Match when={status().type !== "notLogin"}>
             <DeckBuilder
               class={`h-[calc(100dvh-9rem)] @3xl:h-auto w-full flex-grow min-h-0`}
-              assetsManager={assetsManager(previewProfile()?.baseVersion ?? previewSingle() ?? undefined)}
+              assetsManager={assetsManager(previewDetail() ?? previewSingle() ?? undefined)}
               hideVersionSelect
               locale={locale()}
               deck={deckValue()}

@@ -188,7 +188,14 @@ export function customProfile(
       assets: {
         version: baseVersion,
         customData,
-        overrideData,
+        // 字段级覆盖（如集所长压低的充能）必须一起下发，否则前端仍按静态数据显示
+        overrideData: [
+          ...overrideData,
+          ...Object.entries(options.fieldOverrides ?? {}).map(([id, ov]) => ({
+            id: Number(id),
+            ...ov,
+          })),
+        ],
         officialDeckCompatible,
       },
     },
