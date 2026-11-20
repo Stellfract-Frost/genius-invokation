@@ -19,8 +19,10 @@ import {
   Switch,
   Match,
   Show,
+  For,
   createEffect,
 } from "solid-js";
+import { VERSIONS } from "@gi-tcg/core";
 import { Layout } from "../layouts/Layout";
 import axios, { AxiosError } from "axios";
 import type { Deck } from "@gi-tcg/typings";
@@ -48,6 +50,7 @@ export default function EditDeck() {
   const [deckName, setDeckName] = createSignal<string>(
     searchParams.name ?? t("newDeck"),
   );
+  const [previewVersion, setPreviewVersion] = createSignal<string | null>(null);
   const [uploading, setUploading] = createSignal(false);
   const [uploadDone, setUploadDone] = createSignal(false);
   const [deckValue, setDeckValue] = createSignal<Deck>({
@@ -245,6 +248,18 @@ export default function EditDeck() {
             </button>
           </div>
         </div>
+        <div class="flex flex-row flex-wrap items-center gap-2 mb-2 md:mb-3 text-3.2 md:text-3.5">
+          <span class="opacity-70">{t("deckVersion")}</span>
+          <select
+            class="appearance-none"
+            value={previewVersion() ?? ""}
+            onChange={(e) => setPreviewVersion(e.currentTarget.value || null)}
+          >
+            <option value="">{t("deckVersionDefault")}</option>
+            <For each={VERSIONS}>{(v) => <option value={v}>{v}</option>}</For>
+          </select>
+          <span class="opacity-60">{t("deckVersionHint")}</span>
+        </div>
         <Switch>
           <Match when={userDeckData.loading}>{t("loading")}</Match>
           <Match when={status().type !== "guest" && userDeckData.error}>
@@ -255,7 +270,7 @@ export default function EditDeck() {
           <Match when={status().type !== "notLogin"}>
             <DeckBuilder
               class={`h-[calc(100dvh-9rem)] @3xl:h-auto w-full flex-grow min-h-0`}
-              assetsManager={assetsManager()}
+              assetsManager={assetsManager(previewVersion() ?? undefined)}
               locale={locale()}
               deck={deckValue()}
               onChangeDeck={(v) => (setDeckValue(v), setDirty(true))}

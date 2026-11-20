@@ -140,4 +140,7 @@ export default {
   waitingForOpponent: "等待对手加入房间……",
   roomFinished: "此房间的对局已结束。",
   roomLoadFailed: "加载房间失败！{{message}}",
+  deckVersion: "版本预览",
+  deckVersionHint: "切换后，下方角色与卡牌按该版本显示",
+  deckVersionDefault: "默认（最新）",
 };

@@ -142,4 +142,7 @@ export default {
   waitingForOpponent: "Waiting for an opponent to join...",
   roomFinished: "This room's match has ended.",
   roomLoadFailed: "Failed to load room: {{message}}",
+deckVersion: "Version preview",
+  deckVersionHint: "Characters and cards below render at the selected version",
+  deckVersionDefault: "Default (latest)",
 } satisfies I18nDictionary;
