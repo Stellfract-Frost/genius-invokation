@@ -22,7 +22,7 @@ export default {
   logout: "退出登录",
   includeUnreleasedData: "包含未发布数据",
   license: "许可",
-  roomProfile: "规则配置",
+  roomProfile: "比赛版本",
   gameVersion: "游戏版本",
   latestBeta: "最新测试版",
   simulatorVersion: "模拟器版本",

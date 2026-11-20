@@ -24,7 +24,7 @@ export default {
   logout: "Log out",
   includeUnreleasedData: "Includes unreleased data",
   license: "License",
-  roomProfile: "Rules profile",
+  roomProfile: "Match version",
   gameVersion: "Game version",
   latestBeta: "Latest beta",
   simulatorVersion: "Simulator version",
