@@ -16,6 +16,7 @@
 import { Hono } from "hono";
 import { NotFoundException } from "../errors";
 import { type } from "arktype";
+import { VERSIONS, type Version } from "@gi-tcg/core";
 import { sValidator } from "@hono/standard-validator";
 import { getUserId } from "../auth/user.decorator";
 import { decksService, profilesService } from "../services";
@@ -27,10 +28,16 @@ import {
 } from "../utils";
 import { AuthGuard } from "../auth/auth.guard";
 
+const VersionSchema = type("string").narrow(
+  (version, ctx) =>
+    VERSIONS.includes(version as Version) ||
+    ctx.reject("a supported game version"),
+);
+
 export const DeckDto = type({
   characters: "(number.integer > 0)[] == 3",
   cards: "(number.integer > 0)[] == 30",
-  "versions?": "string[]",
+  "versions?": VersionSchema.array(),
 });
 export type DeckDto = typeof DeckDto.infer;
 

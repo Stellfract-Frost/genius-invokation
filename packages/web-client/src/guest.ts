@@ -31,6 +31,7 @@ export interface GuestInfo {
 
 export interface DeckWithName extends Deck {
   name: string;
+  versions?: string[] | null;
 }
 
 export type GuestDeck = readonly [

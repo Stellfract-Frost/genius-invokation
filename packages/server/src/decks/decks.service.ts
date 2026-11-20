@@ -68,7 +68,7 @@ export class DecksService {
         name: deck.name,
         characters: deck.characters,
         cards: deck.cards,
-        versions: deck.versions ?? null,
+        versions: deck.versions ? [...new Set(deck.versions)] : null,
         ownerUserId: userId,
         requiredVersion,
       })
@@ -142,7 +142,9 @@ export class DecksService {
         name: deck.name,
         characters: deck.characters,
         cards: deck.cards,
-        ...(deck.versions !== undefined ? { versions: deck.versions } : {}),
+        ...(deck.versions !== undefined
+          ? { versions: [...new Set(deck.versions)] }
+          : {}),
         requiredVersion,
         updatedAt: new Date(),
       })

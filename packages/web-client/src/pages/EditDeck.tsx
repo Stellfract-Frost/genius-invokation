@@ -189,13 +189,11 @@ export default function EditDeck() {
     if (deckInfo) {
       setDeckValue(unwrap(deckInfo));
       setDeckName(deckInfo.name);
-      const savedVersions = (deckInfo as any).versions as string[] | null | undefined;
-      if (Array.isArray(savedVersions) && savedVersions.length > 0) {
+      const savedVersions = deckInfo.versions?.filter((version) =>
+        VERSIONS.includes(version as never),
+      );
+      if (savedVersions) {
         setPreviewVersions(savedVersions);
-      }
-      const saved = (deckInfo as any).versions as string[] | null | undefined;
-      if (Array.isArray(saved) && saved.length > 0) {
-        setPreviewVersions(saved);
       }
       setSearchParams({ name: null }, { replace: true });
     }
@@ -287,17 +285,17 @@ export default function EditDeck() {
       ...deckValue(),
       name: deckName(),
       versions: previewVersions(),
-    } as any;
+    };
     const { type } = status();
     try {
       setUploading(true);
       if (isNew) {
         if (type === "guest") {
           const created = await addGuestDeck(deckInfo);
-          migrateVersionStorage((created as any)?.id);
+          migrateVersionStorage(created.id);
         } else if (type === "user") {
-          const res = await axios.post("decks", deckInfo);
-          migrateVersionStorage((res.data as any)?.id);
+          const res = await axios.post<{ id: number }>("decks", deckInfo);
+          migrateVersionStorage(res.data.id);
         }
         setDirty(false);
       } else {

@@ -29,6 +29,8 @@ export interface DeckInfo extends Deck {
   name: string;
   code: string;
   requiredVersion: number;
+  /** null/undefined 表示旧牌组尚未记录版本 */
+  versions?: string[] | null;
 }
 
 interface DecksResponse {
