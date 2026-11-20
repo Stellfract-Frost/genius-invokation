@@ -61,6 +61,8 @@ export const decks = pgTable(
     name: text().notNull(),
     characters: jsonb().$type<number[]>().notNull(),
     cards: jsonb().$type<number[]>().notNull(),
+    // 该牌组使用的版本（多选=比赛版本）；null 表示跟随默认
+    versions: jsonb().$type<string[]>(),
     requiredVersion: integer().notNull(),
     ownerUserId: integer().notNull(),
     createdAt: createdAt(),

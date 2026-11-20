@@ -189,6 +189,14 @@ export default function EditDeck() {
     if (deckInfo) {
       setDeckValue(unwrap(deckInfo));
       setDeckName(deckInfo.name);
+      const savedVersions = (deckInfo as any).versions as string[] | null | undefined;
+      if (Array.isArray(savedVersions) && savedVersions.length > 0) {
+        setPreviewVersions(savedVersions);
+      }
+      const saved = (deckInfo as any).versions as string[] | null | undefined;
+      if (Array.isArray(saved) && saved.length > 0) {
+        setPreviewVersions(saved);
+      }
       setSearchParams({ name: null }, { replace: true });
     }
   });
@@ -275,7 +283,11 @@ export default function EditDeck() {
   };
 
   const saveDeck = async () => {
-    const deckInfo = { ...deckValue(), name: deckName() };
+    const deckInfo = {
+      ...deckValue(),
+      name: deckName(),
+      versions: previewVersions(),
+    } as any;
     const { type } = status();
     try {
       setUploading(true);

@@ -30,6 +30,7 @@ import { AuthGuard } from "../auth/auth.guard";
 export const DeckDto = type({
   characters: "(number.integer > 0)[] == 3",
   cards: "(number.integer > 0)[] == 30",
+  "versions?": "string[]",
 });
 export type DeckDto = typeof DeckDto.infer;
 
