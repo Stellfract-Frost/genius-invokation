@@ -100,7 +100,17 @@ export function createPracticeResolver(
   const resolve = <T extends VersionCandidate>(candidates: readonly T[]) => {
     const id = candidates[0]?.id;
     const required = versionMap[id] ?? baseVersion;
-    return pickOfficial(candidates, required);
+    const hit = pickOfficial(candidates, required);
+    if (hit) return hit;
+    // 兜底 1：回落到 base 版本
+    // （传播可能把子实体推到比它登场还早的版本，直接返回 null 会让 loader 抛错）
+    const byBase = pickOfficial(candidates, baseVersion);
+    if (byBase) return byBase;
+    // 兜底 2：取最早的一个 since 定义，保证一定能解析出实体
+    const since = candidates
+      .filter((c) => c.version.from === "official" && c.version.value.predicate === "since")
+      .sort((a, b) => versionCompare(a.version.value.version, b.version.value.version));
+    return since[0] ?? candidates[0] ?? null;
   };
 
   const fn = (<T extends VersionCandidate>(candidates: readonly T[]) =>

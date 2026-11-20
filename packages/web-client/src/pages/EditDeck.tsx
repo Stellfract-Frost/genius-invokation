@@ -22,6 +22,7 @@ import {
   For,
   createEffect,
   onCleanup,
+  onMount,
 } from "solid-js";
 import { VERSIONS } from "@gi-tcg/core";
 import type { ProfileSummary } from "../profiles";
@@ -57,6 +58,33 @@ export default function EditDeck() {
   const [previewProfile, setPreviewProfile] = createSignal<ProfileSummary | null>(null);
   const [previewSingle, setPreviewSingle] = createSignal<string | null>(null);
   const [previewState, setPreviewState] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
+  // 版本随牌组记忆：同一牌组再次打开时回填
+  const versionKey = () => `deck-versions:${params.id ?? "new"}`;
+  let versionsLoaded = false;
+  const pruneByVersion = (base: string) => {
+    const mgr = assetsManager(base);
+    const idx = (x: string) => VERSIONS.indexOf(x as never);
+    const ok = (id: number) => {
+      try {
+        const d: any = mgr.getDataSync(id);
+        const since: string | undefined = d?.sinceVersion;
+        return !since || idx(since) <= idx(base);
+      } catch {
+        return true;
+      }
+    };
+    const cur = deckValue();
+    const characters = cur.characters.filter(ok);
+    const cards = cur.cards.filter(ok);
+    if (
+      characters.length !== cur.characters.length ||
+      cards.length !== cur.cards.length
+    ) {
+      setDeckValue({ characters, cards });
+      setDirty(true);
+    }
+  };
+
   const togglePreviewVersion = (v: string) => {
     const cur = previewVersions();
     setPreviewVersions(cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v]);
@@ -71,8 +99,19 @@ export default function EditDeck() {
     isNew ? void 0 : axios.get(`decks/${deckId}`).then((r) => r.data),
   );
 
+  onMount(() => {
+    try {
+      const raw = localStorage.getItem(versionKey());
+      if (raw) setPreviewVersions(JSON.parse(raw));
+    } catch {
+      /* ignore */
+    }
+    versionsLoaded = true;
+  });
+
   createEffect(() => {
     const vs = previewVersions();
+    if (!versionsLoaded) return;
     if (vs.length === 0) {
       setPreviewProfile(null);
       setPreviewSingle(null);
@@ -84,6 +123,7 @@ export default function EditDeck() {
       setPreviewProfile(null);
       setPreviewSingle(vs[0]);
       setPreviewState("ready");
+      pruneByVersion(vs[0]);
       return;
     }
     setPreviewSingle(null);
@@ -93,11 +133,22 @@ export default function EditDeck() {
         const { data } = await axios.post<ProfileSummary>("profiles/merge", { versions: vs });
         setPreviewProfile(data);
         setPreviewState("ready");
+        pruneByVersion(data.baseVersion);
       } catch {
         setPreviewState("error");
       }
     }, 400);
     onCleanup(() => clearTimeout(timer));
+  });
+
+  createEffect(() => {
+    const vs = previewVersions();
+    if (!versionsLoaded) return;
+    try {
+      localStorage.setItem(versionKey(), JSON.stringify(vs));
+    } catch {
+      /* ignore */
+    }
   });
 
   createEffect(() => {
