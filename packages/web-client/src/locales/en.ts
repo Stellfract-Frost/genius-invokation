@@ -143,6 +143,8 @@ export default {
   roomFinished: "This room's match has ended.",
   roomLoadFailed: "Failed to load room: {{message}}",
 deckVersion: "Version preview",
-  deckVersionHint: "Characters and cards below render at the selected version",
+  deckVersionHint: "Select 2-6 versions; characters and cards render from the merged pool",
   deckVersionDefault: "Default (latest)",
+  deckVersionClear: "Clear",
+  deckVersionNone: "No versions selected (latest)",
 } satisfies I18nDictionary;

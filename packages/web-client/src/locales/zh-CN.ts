@@ -141,6 +141,9 @@ export default {
   roomFinished: "此房间的对局已结束。",
   roomLoadFailed: "加载房间失败！{{message}}",
   deckVersion: "版本预览",
-  deckVersionHint: "切换后，下方角色与卡牌按该版本显示",
+  deckVersionHint: "可多选（2~6 个），下方角色与卡牌按所选版本合并显示",
   deckVersionDefault: "默认（最新）",
+  deckVersionClear: "清空",
+  deckVersionNone: "未选择版本（显示最新）",
+
 };

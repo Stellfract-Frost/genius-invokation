@@ -21,8 +21,14 @@ import {
   Show,
   For,
   createEffect,
+  onCleanup,
 } from "solid-js";
 import { VERSIONS } from "@gi-tcg/core";
+import {
+  fetchProfile,
+  type ProfileDetail,
+  type ProfileSummary,
+} from "../profiles";
 import { Layout } from "../layouts/Layout";
 import axios, { AxiosError } from "axios";
 import type { Deck } from "@gi-tcg/typings";
@@ -50,7 +56,15 @@ export default function EditDeck() {
   const [deckName, setDeckName] = createSignal<string>(
     searchParams.name ?? t("newDeck"),
   );
-  const [previewVersion, setPreviewVersion] = createSignal<string | null>(null);
+  // 版本预览：可多选，按合并后的卡池渲染
+  const [previewVersions, setPreviewVersions] = createSignal<string[]>([]);
+  const [previewProfile, setPreviewProfile] = createSignal<ProfileSummary | null>(null);
+  const [previewDetail, setPreviewDetail] = createSignal<ProfileDetail | null>(null);
+  const [previewState, setPreviewState] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
+  const togglePreviewVersion = (v: string) => {
+    const cur = previewVersions();
+    setPreviewVersions(cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v]);
+  };
   const [uploading, setUploading] = createSignal(false);
   const [uploadDone, setUploadDone] = createSignal(false);
   const [deckValue, setDeckValue] = createSignal<Deck>({
@@ -60,6 +74,28 @@ export default function EditDeck() {
   const [userDeckData] = createResource(() =>
     isNew ? void 0 : axios.get(`decks/${deckId}`).then((r) => r.data),
   );
+
+  createEffect(() => {
+    const vs = previewVersions();
+    if (vs.length === 0) {
+      setPreviewProfile(null);
+      setPreviewDetail(null);
+      setPreviewState("idle");
+      return;
+    }
+    setPreviewState("loading");
+    const timer = setTimeout(async () => {
+      try {
+        const { data } = await axios.post<ProfileSummary>("profiles/merge", { versions: vs });
+        setPreviewProfile(data);
+        setPreviewDetail(await fetchProfile(data));
+        setPreviewState("ready");
+      } catch {
+        setPreviewState("error");
+      }
+    }, 400);
+    onCleanup(() => clearTimeout(timer));
+  });
 
   createEffect(() => {
     if (isNew) {
@@ -248,17 +284,48 @@ export default function EditDeck() {
             </button>
           </div>
         </div>
-        <div class="flex flex-row flex-wrap items-center gap-2 mb-2 md:mb-3 text-3.2 md:text-3.5">
-          <span class="opacity-70">{t("deckVersion")}</span>
-          <select
-            class="appearance-none"
-            value={previewVersion() ?? ""}
-            onChange={(e) => setPreviewVersion(e.currentTarget.value || null)}
-          >
-            <option value="">{t("deckVersionDefault")}</option>
-            <For each={VERSIONS}>{(v) => <option value={v}>{v}</option>}</For>
-          </select>
-          <span class="opacity-60">{t("deckVersionHint")}</span>
+        <div class="rounded-lg b-1 b-gray-400/50 p-3 mb-3 md:mb-4">
+          <div class="flex flex-row flex-wrap items-center gap-2 mb-2">
+            <span class="font-bold text-3.4 md:text-3.6">{t("deckVersion")}</span>
+            <span class="text-3 opacity-60">{t("deckVersionHint")}</span>
+            <span class="flex-grow" />
+            <Show when={previewVersions().length > 0}>
+              <button
+                type="button"
+                class="text-3 underline opacity-70"
+                onClick={() => setPreviewVersions([])}
+              >
+                {t("deckVersionClear")}
+              </button>
+            </Show>
+          </div>
+          <div class="flex flex-row flex-wrap gap-1.5">
+            <For each={VERSIONS}>
+              {(v) => (
+                <button
+                  type="button"
+                  class="text-3 px-2 py-1 rounded b-1"
+                  classList={{
+                    "b-amber-500 bg-amber-500/20": previewVersions().includes(v),
+                    "b-gray-400/40": !previewVersions().includes(v),
+                  }}
+                  onClick={() => togglePreviewVersion(v)}
+                >
+                  {v}
+                </button>
+              )}
+            </For>
+          </div>
+          <div class="text-3 mt-2 opacity-70">
+            <Switch>
+              <Match when={previewState() === "loading"}>{t("loading")}</Match>
+              <Match when={previewState() === "error"}>{t("loadFailed", { message: "" })}</Match>
+              <Match when={previewState() === "ready"}>
+                {previewProfile()?.name} · base {previewProfile()?.baseVersion}
+              </Match>
+              <Match when={true}>{t("deckVersionNone")}</Match>
+            </Switch>
+          </div>
         </div>
         <Switch>
           <Match when={userDeckData.loading}>{t("loading")}</Match>
@@ -270,7 +337,7 @@ export default function EditDeck() {
           <Match when={status().type !== "notLogin"}>
             <DeckBuilder
               class={`h-[calc(100dvh-9rem)] @3xl:h-auto w-full flex-grow min-h-0`}
-              assetsManager={assetsManager(previewVersion() ?? undefined)}
+              assetsManager={assetsManager(previewDetail() ?? undefined)}
               locale={locale()}
               deck={deckValue()}
               onChangeDeck={(v) => (setDeckValue(v), setDirty(true))}
