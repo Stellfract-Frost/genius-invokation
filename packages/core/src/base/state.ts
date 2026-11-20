@@ -31,6 +31,7 @@ import type {
 } from "./skill";
 import { randomSeed } from "../random";
 import type { Version } from "..";
+import type { RoomRuleId } from "../room_rules";
 import { versionLt } from "./version";
 import type {
   AttachmentDefinition,
@@ -87,6 +88,13 @@ export interface GameConfig {
   readonly hostRelatedExecution: boolean;
 
   readonly randomElementIncludesOmni: boolean;
+
+  /**
+   * 房间级别的「特殊规则」，由房主在创建房间时选择，对双方同时生效。
+   *
+   * 规则的具体实现见 `room_rules.ts`。
+   */
+  readonly roomRules: readonly RoomRuleId[];
 }
 
 export const getDefaultGameConfig = (): GameConfig => ({
@@ -104,6 +112,7 @@ export const getDefaultGameConfig = (): GameConfig => ({
   hostWho: 0,
   hostRelatedExecution: false,
   randomElementIncludesOmni: false,
+  roomRules: [],
 });
 
 export type InsufficientDiceBehavior = "throw" | "skipConsume" | "skipAction";

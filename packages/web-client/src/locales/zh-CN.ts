@@ -145,5 +145,33 @@ export default {
   deckVersionDefault: "默认（最新）",
   deckVersionClear: "清空",
   deckVersionNone: "未选择版本（显示最新）",
-
+  specialRules: "特殊规则",
+  specialRulesHint: "房主选择后对双方同时生效，不选则为标准对局。",
+  specialRulesBuff: "增益规则",
+  specialRulesDebuff: "减益规则",
+  specialRulesChaos: "混沌",
+  specialRulesChaosDesc:
+    "每回合随机获得一个增益规则，且不会重复；全部用完后重新开启一轮。选择混沌后将不能单独勾选其它规则。",
+  rule_chaos_name: "混沌",
+  rule_chaos_desc:
+    "每回合随机获得一个增益规则，且不会重复；全部用完后重新开启一轮。",
+  rule_extraDraw_name: "抽牌",
+  rule_extraDraw_desc: "对局开始时手牌数量变为 7 张。",
+  rule_shiftingCost_name: "变化",
+  rule_shiftingCost_desc:
+    "手牌抽到手上时，元素骰费用随机变为 0~3，之后固定不变。",
+  rule_regeneration_name: "回复",
+  rule_regeneration_desc: "每回合结束时，双方所有角色回复 1 点生命。",
+  rule_extraDie_name: "增费",
+  rule_extraDie_desc: "每回合开始时，双方各获得 1 个万能元素骰。",
+  rule_undercurrent_name: "暗流",
+  rule_undercurrent_desc:
+    "每回合开始时，双方各获得 2 层「暗流的诅咒」：使用元素战技或元素爆发时多花费 1 个元素骰，可用 2 次。",
+  rule_restraint_name: "束缚",
+  rule_restraint_desc: "每回合最多只能打出 3 张手牌。",
+  rule_noHeal_name: "禁疗",
+  rule_noHeal_desc: "所有治疗量变为 0（复活除外），治疗仍会正常结算。",
+  rule_forbiddenKnowledge_name: "禁忌",
+  rule_forbiddenKnowledge_desc:
+    "对局开始时，双方牌库中随机塞入 6 张「禁忌知识」。",
 };

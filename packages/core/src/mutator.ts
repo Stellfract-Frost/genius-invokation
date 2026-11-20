@@ -47,6 +47,11 @@ import {
   type InsertEntityOptions,
 } from "./utils";
 import {
+  SHIFTING_COST_MAX,
+  hasRule,
+  isRuleActiveThisRound,
+} from "./room_rules";
+import {
   GiTcgCoreInternalError,
   GiTcgDataError,
   GiTcgIoError,
@@ -737,6 +742,14 @@ export class StateMutator {
     const damageType = DamageType.Heal;
     const events = new EventList();
     let causeDefeated = false;
+    // 特殊规则「禁疗」：常规治疗量归零，但仍走完整结算（显示为回复 +0）。
+    // 复活、免于击倒与提升生命上限不受影响。
+    const noHeal =
+      hasRule(this.state, "noHeal") &&
+      (opt.kind === "common" || opt.kind === "distribution");
+    if (noHeal) {
+      value = 0;
+    }
     if (!targetState.variables.alive) {
       if (opt.kind === "revive") {
         this.log(
@@ -803,6 +816,10 @@ export class StateMutator {
       return { events, causeDefeated };
     }
     healInfo = modifier.healInfo;
+    if (noHeal) {
+      // 即使被「治疗量增加」类效果修正，禁疗下也保持为 0
+      healInfo = { ...healInfo, value: 0, expectedValue: 0 };
+    }
     const newHealth =
       opt.kind === "immuneDefeated"
         ? healInfo.value
@@ -959,10 +976,31 @@ export class StateMutator {
     const reason =
       payload.type === "createEntity" ? ("create" as const) : payload.reason;
     this.mutate(payload);
-    const state: EntityState = {
+    let state: EntityState = {
       ...payload.value,
       [StateSymbol]: "entity",
     };
+    // 特殊规则「变化」：手牌进入手牌区的那一刻确定费用，此后固定不再变化
+    //（洗回牌库时费用随实体一起保留，再次上手也不会重掷）
+    if (isRuleActiveThisRound(this.state, "shiftingCost")) {
+      const hands = this.state.players[who].hands;
+      const inserted = hands[hands.length - 1];
+      if (
+        inserted &&
+        typeof inserted.variables.ruleCost === "undefined"
+      ) {
+        const value = this.stepRandom() % (SHIFTING_COST_MAX + 1);
+        this.mutate({
+          type: "modifyEntityVar",
+          state: inserted,
+          varName: "ruleCost",
+          oldValue: 0,
+          value,
+          direction: null,
+        });
+        state = getEntityById(this.state, inserted.id) as EntityState;
+      }
+    }
     let overflowed = false;
     if (
       !opt.noOverflow &&

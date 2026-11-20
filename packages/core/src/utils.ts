@@ -70,6 +70,7 @@ import type { ActionInfoWithModification } from "./preview";
 import type { PlayerConfig } from "./player";
 import type { MoveEntityM } from "./base/mutation";
 import type { ExEntityType } from "./data/type";
+import { isRuleActiveThisRound, shiftedCostOf } from "./room_rules";
 
 export type Computed<T, R = any> = {
   [K in keyof T]: T[K];
@@ -1034,6 +1035,13 @@ export function applyAttachmentModifications(
     if (legendCost > 0) {
       costs.set(DiceType.Legend, legendCost);
     }
+  }
+  // 特殊规则「变化」：使用手牌上手时固定下来的费用覆写（能量 / 秘传费用不受影响）
+  if (
+    isRuleActiveThisRound(state, "shiftingCost") &&
+    typeof card.variables.ruleCost === "number"
+  ) {
+    costs = shiftedCostOf(costs, card.variables.ruleCost);
   }
   return {
     requiredCost: normalizeCost(costs),

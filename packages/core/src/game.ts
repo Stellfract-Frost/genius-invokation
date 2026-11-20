@@ -108,6 +108,24 @@ import {
 import { type ActionInfoWithModification, ActionPreviewer } from "./preview";
 import { Player } from "./player";
 import type { CharacterDefinition } from "./base/character";
+import {
+  CHAOS_EXTRA_DRAW_COUNT,
+  EXTRA_DRAW_HANDS_COUNT,
+  FORBIDDEN_KNOWLEDGE_COUNT,
+  RESTRAINT_PLAY_LIMIT,
+  RULE_EXTENSION_ID,
+  RULE_RELATED_DEFINITION_IDS,
+  RULE_PLACEHOLDER_SKILL,
+  UNDERCURRENT_STACKS,
+  drawChaosRule,
+  getPlayedCards,
+  getRoomRules,
+  getRuleRuntime,
+  hasRule,
+  isRuleActiveThisRound,
+  roomRuleExtensionDefinition,
+  type RoomRuleRuntimeState,
+} from "./room_rules";
 import { $, runQuery, toExpression, type QueryFn } from "./query";
 import type { IQuery } from "./query/utils";
 import { runWithAsyncContext } from "./async_context";
@@ -289,7 +307,7 @@ export class Game {
       versionBehavior = CURRENT_VERSION,
       ...partialConfig
     } = opt;
-    const extensions = data.extensions
+    const baseExtensions = data.extensions
       .values()
       .map<ExtensionState>((v) => ({
         [StateSymbol]: "extension",
@@ -298,6 +316,18 @@ export class Game {
       }))
       .toArray();
     const config = mergeGameConfigWithDefault(partialConfig);
+    const roomRules = config.roomRules ?? [];
+    const extensions: ExtensionState[] =
+      roomRules.length > 0
+        ? [
+            ...baseExtensions,
+            {
+              [StateSymbol]: "extension",
+              definition: roomRuleExtensionDefinition,
+              state: roomRuleExtensionDefinition.initialState,
+            },
+          ]
+        : baseExtensions;
     const behavior =
       typeof versionBehavior === "string"
         ? getVersionBehavior(versionBehavior)
@@ -328,6 +358,147 @@ export class Game {
 
   get config() {
     return this.state.config;
+  }
+
+  // ---------------------------------------------------------------
+  // 特殊规则（房间级修饰）
+  // ---------------------------------------------------------------
+
+  private setRuleRuntime(next: RoomRuleRuntimeState) {
+    if (
+      !this.state.extensions.some(
+        (ext) => ext.definition.id === RULE_EXTENSION_ID,
+      )
+    ) {
+      return;
+    }
+    this.mutate({
+      type: "mutateExtensionState",
+      extensionId: RULE_EXTENSION_ID,
+      newState: next,
+    });
+  }
+
+  /** 规则效果自身需要一个 `via`，这里伪造一个不含任何技能的被动技能定义 */
+  private ruleSkillInfo(caller: AnyState): SkillInfo {
+    return {
+      caller,
+      definition: RULE_PLACEHOLDER_SKILL,
+      requestBy: null,
+      prepared: false,
+      environment: "normal",
+      finalizeMode: "standard",
+    };
+  }
+
+  /** 开局：双方牌库随机塞入「禁忌知识」 */
+  private ruleInjectForbiddenKnowledge() {
+    if (!hasRule(this.state, "forbiddenKnowledge")) {
+      return;
+    }
+    const definition = this.state.data.entities.get(
+      RULE_RELATED_DEFINITION_IDS.forbiddenKnowledge,
+    );
+    if (typeof definition === "undefined") {
+      return;
+    }
+    for (const who of [0, 1] as const) {
+      const payloads = Array.from({ length: FORBIDDEN_KNOWLEDGE_COUNT }, () => ({
+        type: "createEntity" as const,
+        target: { who, type: "pile" as const, cardId: 0 },
+        value: {
+          id: 0,
+          definition,
+          variables: {},
+          attachments: [],
+        },
+      }));
+      this.mutator.insertPileCards(payloads, "random", who);
+    }
+  }
+
+  /** 每回合开始：混沌抽规则、暗流加状态、束缚清零 */
+  private async ruleOnRoundBegin() {
+    if (getRoomRules(this.state).length === 0) {
+      return;
+    }
+    const runtime = getRuleRuntime(this.state);
+    let next: RoomRuleRuntimeState = {
+      ...runtime,
+      playedCards: [0, 0],
+    };
+    if (hasRule(this.state, "chaos")) {
+      next = drawChaosRule(next, () => this.mutator.stepRandom());
+    }
+    this.setRuleRuntime(next);
+
+    // 混沌抽到「抽牌」：本回合立即抽 2 张
+    if (hasRule(this.state, "chaos") && next.chaosActive === "extraDraw") {
+      for (const who of [0, 1] as const) {
+        const { events } = this.mutator.drawCardsPlain(
+          who,
+          CHAOS_EXTRA_DRAW_COUNT,
+        );
+        await this.handleEvents(events);
+      }
+    }
+
+    // 暗流：双方各获得 2 层「暗流的诅咒」
+    if (isRuleActiveThisRound(this.state, "undercurrent")) {
+      const definition = this.state.data.entities.get(
+        RULE_RELATED_DEFINITION_IDS.curseOfTheUndercurrent,
+      );
+      if (typeof definition !== "undefined") {
+        for (const who of [0, 1] as const) {
+          const caller = this.state.players[who].characters[0]!;
+          const { events } = this.mutator.insertEntityOnStage(
+            { definition },
+            { who, type: "combatStatuses" },
+            this.ruleSkillInfo(caller),
+            { overrideVariables: { usage: UNDERCURRENT_STACKS } },
+          );
+          if (events.length > 0) {
+            await this.handleEvents(events);
+          }
+        }
+      }
+    }
+  }
+
+  /** 每回合结束：回复规则 */
+  private async ruleOnRoundEnd() {
+    if (!isRuleActiveThisRound(this.state, "regeneration")) {
+      return;
+    }
+    for (const who of [0, 1] as const) {
+      for (const character of this.state.players[who].characters) {
+        if (!character.variables.alive) {
+          continue;
+        }
+        if (character.variables.health >= character.variables.maxHealth) {
+          continue;
+        }
+        const { events } = this.mutator.heal(1, character, {
+          via: this.ruleSkillInfo(character),
+          kind: "common",
+        });
+        await this.handleEvents(events);
+      }
+    }
+  }
+
+  /** 回合内已打出手牌数 +1（束缚规则使用） */
+  private ruleCountPlayedCard(who: 0 | 1) {
+    if (!hasRule(this.state, "restraint")) {
+      return;
+    }
+    const runtime = getRuleRuntime(this.state);
+    const playedCards: [number, number] = [...runtime.playedCards] as [
+      number,
+      number,
+    ];
+    playedCards[who] += 1;
+    this.setRuleRuntime({ ...runtime, playedCards });
   }
 
   get detailLog() {
@@ -603,6 +774,8 @@ export class Game {
       );
       await this.handleEvents(events);
     }
+    // 特殊规则：禁忌知识塞入牌库（此时双方牌库已洗好）
+    this.ruleInjectForbiddenKnowledge();
     await this.mutator.notifyAndPause();
     const events = (
       await Promise.all([
@@ -634,6 +807,8 @@ export class Game {
       `In roll phase (round ${this.state.roundNumber}):`,
     );
     await this.handleEvent("onRoundBegin", new EventArg(this.state));
+    // 特殊规则：回合开始（混沌抽取、暗流、束缚计数清零）
+    await this.ruleOnRoundBegin();
     // onRoll event
     interface RollParams {
       fixed: readonly DiceType[];
@@ -658,6 +833,10 @@ export class Game {
             Math.max(0, this.config.initialDiceCount - fixed.length),
             this.players[who].config.alwaysOmni,
           ),
+          // 特殊规则「增费」：每回合额外获得 1 个万能元素骰
+          ...(isRuleActiveThisRound(this.state, "extraDie")
+            ? [DiceType.Omni]
+            : []),
         ]);
         this.mutate({
           type: "resetDice",
@@ -883,6 +1062,8 @@ export class Game {
                 "onPlayCard",
                 new PlayCardEventArg(this.state, actionInfo),
               );
+              // 特殊规则「束缚」：统计本回合打出的手牌数
+              this.ruleCountPlayedCard(who);
               break;
             }
             case "switchActive": {
@@ -967,6 +1148,8 @@ export class Game {
       `In end phase (round ${this.state.roundNumber}, turn ${this.state.currentTurn}):`,
     );
     await this.handleEvent("onEndPhase", new EventArg(this.state));
+    // 特殊规则「回复」：回合结束双方全体角色回复 1 点生命
+    await this.ruleOnRoundEnd();
     for (const who of [this.state.currentTurn, flip(this.state.currentTurn)]) {
       const { events } = this.mutator.drawCardsPlain(who, 2);
       await this.handleEvents(events);
@@ -1173,6 +1356,19 @@ export class Game {
       validity: ActionValidity.VALID,
     });
 
+    // 特殊规则「束缚」：本回合已打满 3 张手牌，禁止继续打出（调和不受限）
+    if (
+      hasRule(this.state, "restraint") &&
+      getPlayedCards(this.state, who) >= RESTRAINT_PLAY_LIMIT
+    ) {
+      for (let i = 0; i < result.length; i++) {
+        const action = result[i]!;
+        if (action.type === "playCard") {
+          result[i] = { ...action, validity: ActionValidity.DISABLED };
+        }
+      }
+    }
+
     // Add preview and apply modifyAction
     const skipError = (
       ["toleratePreview", "skipPhase"] as ErrorLevel[]
@@ -1295,9 +1491,19 @@ export class Game {
 export function mergeGameConfigWithDefault(
   config?: Partial<GameConfig>,
 ): GameConfig {
-  config = JSON.parse(JSON.stringify(config ?? {}));
-  return {
+  const input: Partial<GameConfig> = JSON.parse(
+    JSON.stringify(config ?? {}),
+  );
+  const merged: GameConfig = {
     ...getDefaultGameConfig(),
-    ...config,
+    ...input,
   };
+  // 特殊规则「抽牌」：开局手牌 7 张（显式指定了 initialHandsCount 时以调用方为准）
+  if (
+    merged.roomRules?.includes("extraDraw") &&
+    typeof input.initialHandsCount === "undefined"
+  ) {
+    return { ...merged, initialHandsCount: EXTRA_DRAW_HANDS_COUNT };
+  }
+  return merged;
 }

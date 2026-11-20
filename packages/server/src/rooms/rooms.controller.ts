@@ -37,6 +37,8 @@ export const CreateRoomDto = type({
   "watchable?": "boolean",
   "private?": "boolean",
   "allowGuest?": "boolean",
+  /** 房间级「特殊规则」，由房主选择，对双方生效 */
+  "roomRules?": "string[]",
 });
 export type CreateRoomDto = typeof CreateRoomDto.infer;
 

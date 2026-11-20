@@ -48,6 +48,7 @@ import {
   SummonHandle,
   SupportHandle,
 } from "@gi-tcg/core/data";
+import { roomRuleExtensionDefinition } from "@gi-tcg/core";
 import { TestController } from "./controller";
 
 await setAsyncContext(true);
@@ -530,6 +531,13 @@ export function setup(state: JSX.Element): TestController {
       state: def.initialState,
     }))
     .toArray();
+  if ((stateProp.config?.roomRules ?? []).length > 0) {
+    extensions.push({
+      [StateSymbol]: "extension",
+      definition: roomRuleExtensionDefinition,
+      state: roomRuleExtensionDefinition.initialState,
+    });
+  }
   const gameState: GameState = {
     [StateSymbol]: "game",
     data,

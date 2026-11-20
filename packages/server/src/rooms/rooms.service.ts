@@ -41,6 +41,7 @@ import {
   CORE_VERSION,
   type GameState,
   setAsyncContext,
+  isRoomRuleId,
 } from "@gi-tcg/core";
 import {
   base64Decode,
@@ -561,6 +562,7 @@ class Room {
       state = InternalGame.createInitialState({
         ...this.compiledProfile.profile.gameConfig,
         randomSeed: this.config.randomSeed,
+        roomRules: this.config.roomRules ?? [],
         decks: [player0.playerInfo.deck, player1.playerInfo.deck],
         data: this.compiledProfile.data,
         versionBehavior: this.compiledProfile.profile.versionBehavior,
@@ -806,9 +808,11 @@ export class RoomsService {
           : 1;
 
     const compiledProfile = profilesService.get(params.profileId);
+    const roomRules = (params.roomRules ?? []).filter(isRoomRuleId);
     const roomConfig: CreateRoomConfig = {
       hostWho,
       randomSeed: params.randomSeed,
+      roomRules,
       profile: compiledProfile.summary,
       initTotalActionTime: params.initTotalActionTime ?? 45,
       rerollTime: params.rerollTime ?? 40,

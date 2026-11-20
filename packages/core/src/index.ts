@@ -35,6 +35,15 @@ export {
 export type * from "./base/state";
 export { StateSymbol, PlungingStatus, getVersionBehavior } from "./base/state";
 export { type Mutation } from "./base/mutation";
+export {
+  type RoomRuleId,
+  type RoomRuleMeta,
+  type RoomRulePolarity,
+  ROOM_RULES,
+  CHAOS_POOL,
+  isRoomRuleId,
+  roomRuleExtensionDefinition,
+} from "./room_rules";
 export { type CommonSkillType } from "./base/skill";
 export {
   type Version,

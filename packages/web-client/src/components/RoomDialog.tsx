@@ -102,6 +102,34 @@ interface TimeConfig {
   actionTime: number;
 }
 
+type RoomRulePolarity = "buff" | "debuff" | "special";
+
+interface RoomRuleUi {
+  id: string;
+  polarity: RoomRulePolarity;
+}
+
+/**
+ * 与 `@gi-tcg/core` 的 `room_rules.ts` 保持一致。
+ * 这里不直接 import core，是为了避免前端包新增对 core 的依赖。
+ */
+const ROOM_RULE_UI: RoomRuleUi[] = [
+  { id: "chaos", polarity: "special" },
+  { id: "extraDraw", polarity: "buff" },
+  { id: "shiftingCost", polarity: "buff" },
+  { id: "regeneration", polarity: "buff" },
+  { id: "extraDie", polarity: "buff" },
+  { id: "undercurrent", polarity: "debuff" },
+  { id: "restraint", polarity: "debuff" },
+  { id: "noHeal", polarity: "debuff" },
+  { id: "forbiddenKnowledge", polarity: "debuff" },
+];
+
+const BUFF_RULES = ROOM_RULE_UI.filter((rule) => rule.polarity === "buff");
+const DEBUFF_RULES = ROOM_RULE_UI.filter(
+  (rule) => rule.polarity === "debuff",
+);
+
 const TIME_CONFIGS: TimeConfig[] = [
   {
     nameKey: "timeConfigMinimal",
@@ -172,6 +200,27 @@ export function RoomDialog(props: RoomDialogProps) {
   const [loadingDecks, setLoadingDecks] = createSignal(true);
   const [selectedDeck, setSelectedDeck] = createSignal<number | null>(null);
   const [entering, setEntering] = createSignal(false);
+  const [roomRules, setRoomRules] = createSignal<string[]>(
+    props.joiningRoomInfo?.config?.roomRules ?? [],
+  );
+
+  const toggleRule = (id: string) => {
+    if (!editable()) {
+      return;
+    }
+    const current = roomRules();
+    if (id === "chaos") {
+      // 混沌与其它规则互斥
+      setRoomRules(current.includes("chaos") ? [] : ["chaos"]);
+      return;
+    }
+    const others = current.filter((rule) => rule !== "chaos");
+    setRoomRules(
+      others.includes(id)
+        ? others.filter((rule) => rule !== id)
+        : [...others, id],
+    );
+  };
 
   createEffect(() => {
     const list = profiles();
@@ -271,6 +320,7 @@ export function RoomDialog(props: RoomDialogProps) {
           private: !isPublic(),
           watchable: watchable(),
           allowGuest: allowGuest(),
+          roomRules: roomRules(),
         };
         if (type === "guest") {
           payload.name = name;
@@ -407,6 +457,67 @@ export function RoomDialog(props: RoomDialogProps) {
                   </div>
                 )}
               </For>
+            </div>
+            <div class="mb-3">
+              <h4 class="text-lg mb-1">{t("specialRules")}</h4>
+              <p class="text-xs text-gray-500 mb-2">{t("specialRulesHint")}</p>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
+                <div
+                  class="b-1 b-gray-400 rounded-lg p-2 select-none transition-colors cursor-pointer hover:bg-yellow-50 data-[active=true]:b-slate-500 data-[active=true]:b-2 data-[disabled=true]:pointer-events-none"
+                  data-active={roomRules().includes("chaos")}
+                  data-disabled={!editable()}
+                  onClick={() => toggleRule("chaos")}
+                >
+                  <h5 class="font-bold text-sm">{t("specialRulesChaos")}</h5>
+                  <p class="text-xs text-gray-500 leading-snug">
+                    {t("specialRulesChaosDesc")}
+                  </p>
+                </div>
+              </div>
+              <h5 class="text-sm font-bold text-gray-500 mb-1">
+                {t("specialRulesBuff")}
+              </h5>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
+                <For each={BUFF_RULES}>
+                  {(rule) => (
+                    <div
+                      class="b-1 b-gray-400 rounded-lg p-2 select-none transition-colors cursor-pointer hover:bg-yellow-50 data-[active=true]:b-slate-500 data-[active=true]:b-2 data-[disabled=true]:pointer-events-none"
+                      data-active={roomRules().includes(rule.id)}
+                      data-disabled={!editable()}
+                      onClick={() => toggleRule(rule.id)}
+                    >
+                      <h5 class="font-bold text-sm">
+                        {t(`rule_${rule.id}_name` as any)}
+                      </h5>
+                      <p class="text-xs text-gray-500 leading-snug">
+                        {t(`rule_${rule.id}_desc` as any)}
+                      </p>
+                    </div>
+                  )}
+                </For>
+              </div>
+              <h5 class="text-sm font-bold text-gray-500 mb-1">
+                {t("specialRulesDebuff")}
+              </h5>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
+                <For each={DEBUFF_RULES}>
+                  {(rule) => (
+                    <div
+                      class="b-1 b-gray-400 rounded-lg p-2 select-none transition-colors cursor-pointer hover:bg-yellow-50 data-[active=true]:b-slate-500 data-[active=true]:b-2 data-[disabled=true]:pointer-events-none"
+                      data-active={roomRules().includes(rule.id)}
+                      data-disabled={!editable()}
+                      onClick={() => toggleRule(rule.id)}
+                    >
+                      <h5 class="font-bold text-sm">
+                        {t(`rule_${rule.id}_name` as any)}
+                      </h5>
+                      <p class="text-xs text-gray-500 leading-snug">
+                        {t(`rule_${rule.id}_desc` as any)}
+                      </p>
+                    </div>
+                  )}
+                </For>
+              </div>
             </div>
             <div class="mb-3 flex flex-row gap-4 items-center">
               <h4 class="text-lg">{t("publicRoom")}</h4>

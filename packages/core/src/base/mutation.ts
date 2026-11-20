@@ -677,9 +677,8 @@ export function stringifyMutation(m: Mutation): string | null {
       }] from ${stringifyState(m.caller)}`;
     }
     case "mutateExtensionState": {
-      return `Mutate state of extension ${m.extensionId} to ${JSON.stringify(
-        m.newState,
-      )}`;
+      // 扩展状态属于内部实现细节（含房间特殊规则的运行时计数），不进详情战报
+      return null;
     }
     default: {
       return null;

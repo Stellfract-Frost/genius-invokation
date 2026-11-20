@@ -147,4 +147,37 @@ deckVersion: "Version",
   deckVersionDefault: "Default (latest)",
   deckVersionClear: "Clear",
   deckVersionNone: "No versions selected (latest)",
+  specialRules: "Special Rules",
+  specialRulesHint:
+    "Chosen by the host and applied to both players. Leave empty for a standard match.",
+  specialRulesBuff: "Boons",
+  specialRulesDebuff: "Banes",
+  specialRulesChaos: "Chaos",
+  specialRulesChaosDesc:
+    "Each round grants a random boon that has not appeared yet; once all boons are used a new cycle begins. Chaos cannot be combined with individual rules.",
+  rule_chaos_name: "Chaos",
+  rule_chaos_desc:
+    "Each round grants a random boon that has not appeared yet; once all boons are used a new cycle begins.",
+  rule_extraDraw_name: "Draw",
+  rule_extraDraw_desc: "Starting hand size becomes 7.",
+  rule_shiftingCost_name: "Shift",
+  rule_shiftingCost_desc:
+    "Cards get a random dice cost of 0-3 when drawn into hand, then it stays fixed.",
+  rule_regeneration_name: "Recovery",
+  rule_regeneration_desc:
+    "At the end of each round, all characters on both sides heal 1 HP.",
+  rule_extraDie_name: "Surge",
+  rule_extraDie_desc:
+    "At the start of each round, both players gain 1 Omni die.",
+  rule_undercurrent_name: "Undercurrent",
+  rule_undercurrent_desc:
+    "At the start of each round, both players gain 2 stacks of Curse of the Undercurrent (Elemental Skill/Burst costs 1 more die; 2 usages).",
+  rule_restraint_name: "Restraint",
+  rule_restraint_desc: "At most 3 cards can be played each round.",
+  rule_noHeal_name: "No Heal",
+  rule_noHeal_desc:
+    "All healing becomes 0 (revival excluded); healing still resolves normally.",
+  rule_forbiddenKnowledge_name: "Forbidden",
+  rule_forbiddenKnowledge_desc:
+    "At the start of the game, 6 Forbidden Knowledge cards are shuffled into each player's deck.",
 } satisfies I18nDictionary;
