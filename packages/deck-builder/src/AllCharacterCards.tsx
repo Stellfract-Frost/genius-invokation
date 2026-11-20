@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import { createSignal } from "solid-js";
+import { createEffect, createSignal } from "solid-js";
 import { PoolCard } from "./Card";
 import type { AllCardsProps } from "./AllCards";
 import {
@@ -79,6 +79,18 @@ export function AllCharacterCards(props: AllCardsProps) {
   const fullCharacters = () => {
     return props.deck.characters.length >= 3;
   };
+
+  // 当前版本不包含的角色自动下掉；其天赋牌由行动牌侧的合法性检查连带移除
+  createEffect(() => {
+    const characters = props.deck.characters;
+    const available = characters.filter((id) => props.characters.has(id));
+    if (available.length !== characters.length) {
+      props.onChangeDeck?.({
+        ...props.deck,
+        characters: available,
+      });
+    }
+  });
 
   const toggleCharacter = (id: number) => {
     if (selected(id)) {

@@ -37,10 +37,13 @@ export function AllActionCards(props: AllCardsProps) {
     return props.deck.cards.length >= 30;
   };
 
-  // Remove invalid action cards
+  // Remove invalid action cards, including cards absent from the selected version
   createEffect(() => {
     const currentCards = props.deck.cards;
-    const result = currentCards.filter((c) => valid(props.actionCards.get(c)!));
+    const result = currentCards.filter((c) => {
+      const actionCard = props.actionCards.get(c);
+      return !!actionCard && valid(actionCard);
+    });
     if (result.length < currentCards.length) {
       props.onChangeDeck?.({
         ...props.deck,

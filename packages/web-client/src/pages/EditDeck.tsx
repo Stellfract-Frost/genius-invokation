@@ -66,29 +66,6 @@ export default function EditDeck() {
   // 版本随牌组记忆：同一牌组再次打开时回填
   const versionKey = () => `deck-versions:${params.id ?? "new"}`;
   let versionsLoaded = false;
-  const pruneByVersion = (base: string) => {
-    const mgr = assetsManager(base);
-    const idx = (x: string) => VERSIONS.indexOf(x as never);
-    const ok = (id: number) => {
-      try {
-        const d: any = mgr.getDataSync(id);
-        const since: string | undefined = d?.sinceVersion;
-        return !since || idx(since) <= idx(base);
-      } catch {
-        return true;
-      }
-    };
-    const cur = deckValue();
-    const characters = cur.characters.filter(ok);
-    const cards = cur.cards.filter(ok);
-    if (
-      characters.length !== cur.characters.length ||
-      cards.length !== cur.cards.length
-    ) {
-      setDeckValue({ characters, cards });
-      setDirty(true);
-    }
-  };
 
   // 新牌组保存后，把版本从 "new" 迁移到真实牌组 id，否则再打开就丢了
   const migrateVersionStorage = (toId?: number) => {
@@ -144,7 +121,6 @@ export default function EditDeck() {
       setPreviewDetail(null);
       setPreviewSingle(vs[0]);
       setPreviewState("ready");
-      pruneByVersion(vs[0]);
       return;
     }
     setPreviewSingle(null);
@@ -155,7 +131,6 @@ export default function EditDeck() {
         setPreviewProfile(data);
         setPreviewDetail(await fetchProfile(data));
         setPreviewState("ready");
-        pruneByVersion(data.baseVersion);
       } catch {
         setPreviewState("error");
       }
