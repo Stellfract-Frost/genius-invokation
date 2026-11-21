@@ -80,6 +80,7 @@ import {
 } from "./base/entity";
 import { costOfCard, getEntityById, initiativeSkillsOfPlayer } from "./utils";
 import type { AttachmentTag } from "./base/attachment";
+import { getRoomRules, getRuleRuntime, hasRule } from "./room_rules";
 
 export interface PlayerIO {
   notify: (notification: Notification) => void;
@@ -658,11 +659,23 @@ function exposeInitiativeSkill(skill: InitiativeSkillDefinition): PbSkillInfo {
 }
 
 export function exposeState(who: 0 | 1, state: GameState): PbGameState {
+  const activeRule: string[] = getRoomRules(state).filter(
+    (id) => id !== "chaos",
+  );
+  const chaosEnabled = hasRule(state, "chaos");
+  if (chaosEnabled) {
+    const chaosActive = getRuleRuntime(state).chaosActive;
+    if (chaosActive) {
+      activeRule.push(chaosActive);
+    }
+  }
   return {
     phase: exposePhaseType(state.phase),
     currentTurn: state.currentTurn,
     roundNumber: state.roundNumber,
     winner: state.winner ?? void 0,
+    activeRule,
+    chaosEnabled,
     player: state.players.map<PbPlayerState>((p, i) => {
       const skills = initiativeSkillsOfPlayer(p).map(({ skill }) => skill);
       const dice =

@@ -94,7 +94,7 @@ export const ROOM_RULES: readonly RoomRuleMeta[] = [
     id: "undercurrent",
     name: "暗流",
     description:
-      "每回合开始时，双方各获得 2 层「暗流的诅咒」：使用元素战技或元素爆发时多花费 1 个元素骰，可用 2 次。",
+      "每奇数回合开始时，双方各获得 2 层「暗流的诅咒」：使用元素战技或元素爆发时多花费 1 个元素骰，可用 2 次。",
     polarity: "debuff",
   },
   {
@@ -258,11 +258,12 @@ export function drawChaosRule(
   if (remaining.length === 0) {
     remaining = [...CHAOS_POOL];
   }
-  const [picked] = remaining;
+  const index = random() % remaining.length;
+  const picked = remaining[index]!;
   return {
     ...runtime,
-    chaosRemaining: remaining.slice(1),
-    chaosActive: picked ?? null,
+    chaosRemaining: remaining.filter((_, i) => i !== index),
+    chaosActive: picked,
   };
 }
 

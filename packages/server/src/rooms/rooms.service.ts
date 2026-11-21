@@ -42,9 +42,6 @@ import {
   type GameState,
   setAsyncContext,
   isRoomRuleId,
-  getRoomRules,
-  getRuleRuntime,
-  type RoomRuleId,
 } from "@gi-tcg/core";
 import {
   base64Decode,
@@ -182,16 +179,6 @@ export interface SSEOppRpc {
   oppTimer: RpcTimer | null;
 }
 
-export interface SSENotice {
-  type: "notice";
-  data: {
-    kind: "roundRules";
-    round: number;
-    chaos: boolean;
-    rules: RoomRuleId[];
-  };
-}
-
 export type SSEPayload =
   | SSEPing
   | SSERpc
@@ -199,8 +186,7 @@ export type SSEPayload =
   | SSEInitialized
   | SSENotification
   | SSEOppRpc
-  | SSEError
-  | SSENotice;
+  | SSEError;
 
 interface RpcResolver {
   id: number;
@@ -238,7 +224,7 @@ class Player implements PlayerIOWithError {
 
   private readonly errorSseSource = new BehaviorSubject<SSEError | null>(null);
   private readonly notificationSseSource =
-    new BehaviorSubject<SSENotification | SSENotice | null>(null);
+    new BehaviorSubject<SSENotification | null>(null);
 
   public readonly notificationSse$: Observable<SSEPayload> = concat<
     (SSEPayload | null)[]
@@ -328,9 +314,6 @@ class Player implements PlayerIOWithError {
       data: base64Encode(PbNotification.encode(notification).finish()),
     });
     this._mutationExtraTimeout += 0.5 * notification.mutation.length;
-  }
-  sendNotice(data: SSENotice["data"]) {
-    this.notificationSseSource.next({ type: "notice", data });
   }
   sendOppRpc(oppTimer: RpcTimer | null) {
     this.oppRpcSubject.next({
@@ -510,8 +493,6 @@ class Room {
   private onStopHandlers: GameStopHandler[] = [];
   private startedAt: Date | null = null;
   private endedAt: Date | null = null;
-  /** 上一次推送过的回合规则提示（round + 混沌结果），用于去重 */
-  private notifiedRuleKey: string | null = null;
 
   constructor(
     public readonly id: number,
@@ -604,7 +585,6 @@ class Room {
           player1.resetRoundTimeout();
         }
       }
-      this.notifyRoundRules(state, player0, player1);
     };
     game.onIoError = (e) => {
       if (e.who === 0) {
@@ -634,45 +614,6 @@ class Room {
         this.stop();
       }
     })();
-  }
-
-  /**
-   * 回合切换时给双方推一次「本回合生效的特殊规则」。
-   *
-   * 只在内容真正变化时推送（回合数或混沌结果变化），避免每次暂停都刷屏。
-   */
-  private notifyRoundRules(
-    state: GameState,
-    player0: Player,
-    player1: Player,
-  ) {
-    const roomRules = getRoomRules(state);
-    if (roomRules.length === 0 || state.roundNumber < 1) {
-      return;
-    }
-    const runtime = getRuleRuntime(state);
-    const chaos = roomRules.includes("chaos");
-    // 混沌还没有抽出本回合结果时先不推，等抽完再推，避免连推两条
-    if (chaos && !runtime.chaosActive) {
-      return;
-    }
-    const rules: RoomRuleId[] = roomRules.filter((id) => id !== "chaos");
-    if (chaos && runtime.chaosActive) {
-      rules.push(runtime.chaosActive);
-    }
-    const key = `${state.roundNumber}|${chaos ? (runtime.chaosActive ?? "") : ""}`;
-    if (key === this.notifiedRuleKey) {
-      return;
-    }
-    this.notifiedRuleKey = key;
-    const notice: SSENotice["data"] = {
-      kind: "roundRules",
-      round: state.roundNumber,
-      chaos,
-      rules,
-    };
-    player0.sendNotice(notice);
-    player1.sendNotice(notice);
   }
 
   giveUp(userId: PlayerId) {

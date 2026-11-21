@@ -149,6 +149,8 @@ export namespace Card {
     pile?: boolean;
     /** 并非来自初始牌堆 */
     notInitial?: boolean;
+    /** 覆盖变量初值（例如特殊规则的 ruleCost） */
+    v?: Record<string, number>;
     children?: JSX.Element[] | JSX.Element;
   }
 }
@@ -392,7 +394,7 @@ export function setup(state: JSX.Element): TestController {
         break;
       }
       case Card: {
-        const { ref, def, pile, notInitial, children } =
+        const { ref, def, pile, notInitial, children, v, ...namedV } =
           prop as OmitProp<Card.Prop>;
         const id = ref?.id ?? nextId();
         if (!def) {
@@ -439,11 +441,15 @@ export function setup(state: JSX.Element): TestController {
           [StateSymbol]: "entity",
           id,
           definition,
-          variables: Object.fromEntries(
-            Object.entries(definition.varConfigs).map(
-              ([name, { initialValue }]) => [name, initialValue],
+          variables: {
+            ...Object.fromEntries(
+              Object.entries(definition.varConfigs).map(
+                ([name, { initialValue }]) => [name, initialValue],
+              ),
             ),
-          ),
+            ...v,
+            ...namedV,
+          },
           attachments: attachments as AttachmentState[],
         };
         const area = pile ? "pile" : "hands";

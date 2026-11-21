@@ -7,7 +7,7 @@
 
 import { ref, setup, Character, State, Card, $ } from "#test";
 import { test, expect } from "vitest";
-import { Game } from "@gi-tcg/core";
+import { Game, exposeState } from "@gi-tcg/core";
 import { Venti } from "@gi-tcg/data/internal/characters/anemo/venti.gts";
 import { MondstadtHashBrown } from "@gi-tcg/data/internal/cards/event/food.gts";
 import { ChangingShifts } from "@gi-tcg/data/internal/cards/event/other.gts";
@@ -52,22 +52,39 @@ test("noHeal off: 同样操作应回复 2 点生命", async () => {
   c.expect($.my.active).toHaveVariable({ health: 7 });
 });
 
-test("undercurrent: 每回合开始双方获得 2 层暗流的诅咒", async () => {
+test("undercurrent: 奇数回合开始时双方获得 2 层暗流的诅咒", async () => {
   const c = setup(
-    <State config={{ roomRules: ["undercurrent"] }}>
+    <State
+      phase="roll"
+      roundNumber={1}
+      config={{ roomRules: ["undercurrent"] }}
+    >
       <Character my active def={Venti} />
       <Character opp active />
     </State>,
   );
-  c.expect($.my.combatStatus.def(CurseOfTheUndercurrent)).toNotExist();
-  await c.me.end();
-  await c.opp.end();
+  await new Promise((resolve) => setTimeout(resolve, 200));
   c.expect($.my.combatStatus.def(CurseOfTheUndercurrent)).toHaveVariable({
     usage: 2,
   });
   c.expect($.opp.combatStatus.def(CurseOfTheUndercurrent)).toHaveVariable({
     usage: 2,
   });
+});
+
+test("undercurrent: 偶数回合不触发", async () => {
+  const c = setup(
+    <State
+      phase="roll"
+      roundNumber={2}
+      config={{ roomRules: ["undercurrent"] }}
+    >
+      <Character my active def={Venti} />
+      <Character opp active />
+    </State>,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  c.expect($.my.combatStatus.def(CurseOfTheUndercurrent)).toNotExist();
 });
 
 test("extraDraw: 开局手牌数为 7", () => {
@@ -150,6 +167,27 @@ test("shiftingCost: 回合开始时重分配，且手牌总费用不变", async 
   expect(costs.some((value) => value === 0)).toBe(true);
 });
 
+test("shiftingCost: 以当前费用为基准，保留此前的增费/减费", async () => {
+  const c = setup(
+    <State config={{ roomRules: ["shiftingCost"] }}>
+      <Character my active def={Venti} />
+      <Character opp active />
+      <Card my def={MondstadtHashBrown} v={{ ruleCost: 3 }} />
+      <Card my def={MondstadtHashBrown} />
+      <Card my def={MondstadtHashBrown} />
+      <Card my def={MondstadtHashBrown} />
+    </State>,
+  );
+  await c.me.end();
+  await c.opp.end();
+  const costs = c.state.players[0].hands.map(
+    (card) => card.variables.ruleCost,
+  );
+  // 当前总费用为 3 + 1 + 1 + 1 = 6，重分配后仍为 6
+  //（若错误地按卡面费用 1*4 计算，这里会变成 4）
+  expect(costs.reduce((acc, value) => acc + (value ?? 0), 0)).toBe(6);
+});
+
 test("shiftingCost: 没有规则时不会给手牌写入费用覆盖", async () => {
   const c = setup(
     <State>
@@ -228,4 +266,49 @@ test("extraDraw + forbiddenKnowledge: 开局抽 7 张并塞入 6 张禁忌知识
   // 对方牌库为空，抽不到牌，但禁忌知识仍会塞入 6 张
   expect(c.state.players[1].hands.length).toBe(0);
   expect(c.state.players[1].pile.length).toBe(6);
+});
+
+test("extraDraw: 即使指定了初始手牌数也强制为 7", () => {
+  const state = Game.createInitialState({
+    decks: [
+      { characters: [], cards: [] },
+      { characters: [], cards: [] },
+    ],
+    data: {
+      characters: new Map(),
+      entities: new Map(),
+      attachments: new Map(),
+      extensions: new Map(),
+    },
+    roomRules: ["extraDraw"],
+    initialHandsCount: 5,
+  });
+  expect(state.config.initialHandsCount).toBe(7);
+});
+
+test("state: 本回合生效规则随对局状态暴露给双方", async () => {
+  const c = setup(
+    <State config={{ roomRules: ["regeneration", "noHeal"] }}>
+      <Character my active def={Venti} />
+      <Character opp active />
+    </State>,
+  );
+  for (const who of [0, 1] as const) {
+    const exposed = exposeState(who, c.state);
+    expect(exposed.activeRule).toEqual(["regeneration", "noHeal"]);
+    expect(exposed.chaosEnabled).toBe(false);
+  }
+});
+
+test("state: 混沌局暴露本回合抽到的规则", async () => {
+  const c = setup(
+    <State phase="roll" roundNumber={1} config={{ roomRules: ["chaos"] }}>
+      <Character my active def={Venti} />
+      <Character opp active />
+    </State>,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  const exposed = exposeState(0, c.state);
+  expect(exposed.chaosEnabled).toBe(true);
+  expect(exposed.activeRule.length).toBe(1);
 });

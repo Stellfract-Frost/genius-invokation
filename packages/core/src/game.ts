@@ -73,7 +73,7 @@ import {
   applyAutoSelectedDiceToAction,
   isChargedPlunging,
   applyAttachmentModifications,
-  originalDiceCostSizeOfCard,
+  diceCostSize,
 } from "./utils";
 import type { GameData } from "./data/registry";
 import {
@@ -449,8 +449,11 @@ export class Game {
     // 「变化」：回合开始时在总费用不变的前提下重新分配手牌费用
     this.ruleShiftingCost();
 
-    // 暗流：双方各获得 2 层「暗流的诅咒」
-    if (isRuleActiveThisRound(this.state, "undercurrent")) {
+    // 暗流：奇数回合开始时双方各获得 2 层「暗流的诅咒」
+    if (
+      isRuleActiveThisRound(this.state, "undercurrent") &&
+      this.state.roundNumber % 2 === 1
+    ) {
       const definition = this.state.data.entities.get(
         RULE_RELATED_DEFINITION_IDS.curseOfTheUndercurrent,
       );
@@ -484,14 +487,18 @@ export class Game {
       if (hands.length === 0) {
         continue;
       }
-      const baseCosts = hands.map((card) =>
-        originalDiceCostSizeOfCard(card.definition),
-      );
+      // 以「当前费用」为基准（包含此前变化规则的结果与其它费用修改），
+      // 而不是卡面原始费用，避免已经减费/增费的牌被重置
       const nextCosts = active
-        ? redistributeShiftingCosts(baseCosts, () =>
-            this.mutator.stepRandom(),
+        ? redistributeShiftingCosts(
+            hands.map((card) =>
+              diceCostSize(
+                applyAttachmentModifications(this.state, card).requiredCost,
+              ),
+            ),
+            () => this.mutator.stepRandom(),
           )
-        : baseCosts.map(() => RULE_COST_NONE);
+        : hands.map(() => RULE_COST_NONE);
       hands.forEach((card, index) => {
         const current = card.variables.ruleCost;
         const next = nextCosts[index]!;
@@ -1547,11 +1554,8 @@ export function mergeGameConfigWithDefault(
     ...getDefaultGameConfig(),
     ...input,
   };
-  // 特殊规则「抽牌」：开局手牌 7 张（显式指定了 initialHandsCount 时以调用方为准）
-  if (
-    merged.roomRules?.includes("extraDraw") &&
-    typeof input.initialHandsCount === "undefined"
-  ) {
+  // 特殊规则「抽牌」：开局手牌 7 张，优先级高于 profile 里的 gameConfig
+  if (merged.roomRules?.includes("extraDraw")) {
     return { ...merged, initialHandsCount: EXTRA_DRAW_HANDS_COUNT };
   }
   return merged;

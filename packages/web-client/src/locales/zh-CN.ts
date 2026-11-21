@@ -166,7 +166,7 @@ export default {
   rule_extraDie_desc: "每回合开始时，双方各获得 1 个万能元素骰。",
   rule_undercurrent_name: "暗流",
   rule_undercurrent_desc:
-    "每回合开始时，双方各获得 2 层「暗流的诅咒」：使用元素战技或元素爆发时多花费 1 个元素骰，可用 2 次。",
+    "每奇数回合开始时，双方各获得 2 层「暗流的诅咒」：使用元素战技或元素爆发时多花费 1 个元素骰，可用 2 次。",
   rule_restraint_name: "束缚",
   rule_restraint_desc: "每回合最多只能打出 3 张手牌。",
   rule_noHeal_name: "禁疗",
@@ -175,6 +175,7 @@ export default {
   rule_forbiddenKnowledge_desc:
     "对局开始时，双方牌库中随机塞入 6 张「禁忌知识」。",
   roundRulesTitle: "第 {{round}} 回合 · 特殊规则",
+  roundRulesBadge: "本回合规则",
   roundRulesNone: "本回合没有生效的特殊规则。",
   roundRulesChaosHint: "混沌：本回合随机抽到的规则已列在上方。",
 };

@@ -171,7 +171,7 @@ deckVersion: "Version",
     "At the start of each round, both players gain 1 Omni die.",
   rule_undercurrent_name: "Undercurrent",
   rule_undercurrent_desc:
-    "At the start of each round, both players gain 2 stacks of Curse of the Undercurrent (Elemental Skill/Burst costs 1 more die; 2 usages).",
+    "At the start of every odd-numbered round, both players gain 2 stacks of Curse of the Undercurrent (Elemental Skill/Burst costs 1 more die; 2 usages).",
   rule_restraint_name: "Restraint",
   rule_restraint_desc: "At most 3 cards can be played each round.",
   rule_noHeal_name: "No Heal",
@@ -181,6 +181,7 @@ deckVersion: "Version",
   rule_forbiddenKnowledge_desc:
     "At the start of the game, 6 Forbidden Knowledge cards are shuffled into each player's deck.",
   roundRulesTitle: "Round {{round}} · Special Rules",
+  roundRulesBadge: "Round rules",
   roundRulesNone: "No special rules in effect this round.",
   roundRulesChaosHint: "Chaos: the rule drawn for this round is listed above.",
 } satisfies I18nDictionary;

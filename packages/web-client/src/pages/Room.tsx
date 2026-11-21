@@ -311,6 +311,10 @@ export default function Room() {
   const [ruleNotice, setRuleNotice] = createSignal<RoundRuleNotice | null>(
     null,
   );
+  // 常驻显示的当前生效规则（来自对局状态，双方必然一致）
+  const [activeRules, setActiveRules] = createSignal<string[]>([]);
+  const [chaosEnabled, setChaosEnabled] = createSignal(false);
+  let lastNotifiedRound = 0;
   let ruleNoticeTimer: number | undefined;
   const showRuleNotice = (notice: RoundRuleNotice) => {
     setRuleNotice(notice);
@@ -318,6 +322,20 @@ export default function Room() {
     ruleNoticeTimer = window.setTimeout(() => setRuleNotice(null), 6000);
   };
   onCleanup(() => window.clearTimeout(ruleNoticeTimer));
+  const applyRuleState = (state: any) => {
+    if (!state) {
+      return;
+    }
+    const rules: string[] = state.activeRule ?? [];
+    const chaos: boolean = state.chaosEnabled ?? false;
+    setActiveRules(rules);
+    setChaosEnabled(chaos);
+    const round: number = state.roundNumber ?? 0;
+    if (round >= 1 && round !== lastNotifiedRound) {
+      lastNotifiedRound = round;
+      showRuleNotice({ kind: "roundRules", round, chaos, rules });
+    }
+  };
   const [currentOppTimer, setCurrentOppTimer] = createSignal<RpcTimer | null>(
     null,
   );
@@ -373,12 +391,7 @@ export default function Room() {
         case "notification": {
           const notification = Notification.decode(base64Decode(payload.data));
           playerIo()?.notify(notification);
-          break;
-        }
-        case "notice": {
-          if (payload.data?.kind === "roundRules") {
-            showRuleNotice(payload.data as RoundRuleNotice);
-          }
+          applyRuleState(notification.state);
           break;
         }
         case "oppRpc": {
@@ -616,6 +629,28 @@ export default function Room() {
                 )}
               </Show>
             </div>
+            <Show when={activeRules().length > 0 || chaosEnabled()}>
+              <div class="w-full flex flex-wrap gap-1.5 items-center mt-1">
+                <span class="px-1.5 py-0.5 rounded bg-slate-700 text-white text-xs font-bold">
+                  {t("roundRulesBadge")}
+                </span>
+                <For each={activeRules()}>
+                  {(ruleId) => (
+                    <span
+                      class="px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-900 text-xs cursor-help"
+                      title={t(`rule_${ruleId}_desc` as any)}
+                    >
+                      {t(`rule_${ruleId}_name` as any)}
+                    </span>
+                  )}
+                </For>
+                <Show when={chaosEnabled()}>
+                  <span class="px-1.5 py-0.5 rounded bg-purple-100 text-purple-900 text-xs cursor-help">
+                    {t("specialRulesChaos")}
+                  </span>
+                </Show>
+              </div>
+            </Show>
           </div>
           <button
             class="hidden group-data-[mobile]:peer-checked:inline-flex btn btn-outline-blue whitespace-normal text-center leading-tight min-h-10 px-4 py-2"

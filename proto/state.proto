@@ -33,6 +33,10 @@ message State {
   int32 current_turn = 3;
   optional int32 winner = 4;
   repeated PlayerState player = 5;
+  // 本回合生效的房间特殊规则 id 列表（含混沌本回合抽到的规则）
+  repeated string active_rule = 6;
+  // 本局是否启用了混沌规则
+  bool chaos_enabled = 7;
 }
 
 // 玩家的当前 IO 状态
