@@ -129,7 +129,7 @@ type PlayerInfo = (
     }
 ) & {
   name: string;
-  deck: Deck;
+  deck: Deck & { versions?: string[] | null };
   avatarUrl?: string | null;
 };
 

@@ -268,9 +268,10 @@ export function RoomDialog(props: RoomDialogProps) {
           "decks/filter",
           {
             profileId,
-            decks: guest.map(({ characters, cards }) => ({
+            decks: guest.map(({ characters, cards, versions }) => ({
               characters,
               cards,
+              versions: versions ?? void 0,
             })),
           },
           { signal },

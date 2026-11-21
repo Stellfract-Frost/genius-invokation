@@ -27,7 +27,7 @@ import { createId as createCuid, isCuid } from "@paralleldrive/cuid2";
 import { BadRequestException } from "./errors";
 import type { CompiledProfile } from "./profiles/types";
 import { decks } from "./db/schema";
-import { and, lte, sql } from "drizzle-orm";
+import { and, lte, or, sql } from "drizzle-orm";
 
 export enum DeckVerificationErrorCode {
   SizeError = "SizeError",
@@ -155,12 +155,19 @@ export async function verifyDeck(deck: Deck): Promise<Version> {
 }
 
 export async function verifyDeckForProfile(
-  deck: Deck,
+  deck: Deck & { versions?: string[] | null },
   profile: CompiledProfile,
 ) {
   const version = await verifyDeck(deck);
   const { whitelist, blacklist, allowNewerCards } = profile.profile.deck ?? {};
-  if (!allowNewerCards && semverCompare(version, profile.profile.baseVersion) > 0) {
+  // 多版本卡组（作者声明兼容多个版本）不受目标规则配置的版本上限限制；
+  // 只有单版本卡组才需要检查它所需的最低版本是否高于当前配置
+  const isMultiVersion = (deck.versions ?? []).length > 1;
+  if (
+    !allowNewerCards &&
+    !isMultiVersion &&
+    semverCompare(version, profile.profile.baseVersion) > 0
+  ) {
     throw new DeckVerificationError(
       DeckVerificationErrorCode.VersionError,
       `Deck version required ${version}, it's higher game version ${profile.profile.baseVersion}`,
@@ -189,7 +196,11 @@ export function buildDeckMatchesProfileDbFilter(profile: CompiledProfile) {
   return and(
     allowNewerCards
       ? void 0
-      : lte(decks.requiredVersion, VERSIONS.indexOf(baseVersion)),
+      : or(
+          lte(decks.requiredVersion, VERSIONS.indexOf(baseVersion)),
+          // 多版本卡组在任意规则配置下都可用（与 verifyDeckForProfile 保持一致）
+          sql`${decks.versions} is not null and jsonb_array_length(${decks.versions}) > 1`,
+        ),
     whitelist
       ? sql`(${decks.characters} || ${decks.cards}) <@ ${JSON.stringify(whitelist)}::jsonb`
       : void 0,
@@ -202,7 +213,10 @@ export function buildDeckMatchesProfileDbFilter(profile: CompiledProfile) {
   );
 }
 
-export async function deckMatchesProfile(deck: Deck, profile: CompiledProfile) {
+export async function deckMatchesProfile(
+  deck: Deck & { versions?: string[] | null },
+  profile: CompiledProfile,
+) {
   try {
     await verifyDeckForProfile(deck, profile);
     return true;
