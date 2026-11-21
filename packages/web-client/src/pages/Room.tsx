@@ -23,6 +23,7 @@ import {
 } from "../utils";
 import {
   Show,
+  For,
   createSignal,
   onMount,
   createEffect,
@@ -52,6 +53,13 @@ import { useAuth } from "../auth";
 import { useI18n } from "../i18n";
 
 import { fetchProfile, type ProfileSummary } from "../profiles";
+
+interface RoundRuleNotice {
+  kind: "roundRules";
+  round: number;
+  chaos: boolean;
+  rules: string[];
+}
 
 interface InitializedPayload {
   profile: ProfileSummary;
@@ -298,6 +306,18 @@ export default function Room() {
   const [currentMyTimer, setCurrentMyTimer] = createSignal<RpcTimer | null>(
     null,
   );
+
+  // 每回合开始时由服务端推送的「本回合特殊规则」提示
+  const [ruleNotice, setRuleNotice] = createSignal<RoundRuleNotice | null>(
+    null,
+  );
+  let ruleNoticeTimer: number | undefined;
+  const showRuleNotice = (notice: RoundRuleNotice) => {
+    setRuleNotice(notice);
+    window.clearTimeout(ruleNoticeTimer);
+    ruleNoticeTimer = window.setTimeout(() => setRuleNotice(null), 6000);
+  };
+  onCleanup(() => window.clearTimeout(ruleNoticeTimer));
   const [currentOppTimer, setCurrentOppTimer] = createSignal<RpcTimer | null>(
     null,
   );
@@ -353,6 +373,12 @@ export default function Room() {
         case "notification": {
           const notification = Notification.decode(base64Decode(payload.data));
           playerIo()?.notify(notification);
+          break;
+        }
+        case "notice": {
+          if (payload.data?.kind === "roundRules") {
+            showRuleNotice(payload.data as RoundRuleNotice);
+          }
           break;
         }
         case "oppRpc": {
@@ -489,6 +515,46 @@ export default function Room() {
         class="p-0 data-[mobile]:h-100dvh data-[mobile]:overflow-clip container mx-auto flex flex-col group max-w-[calc((100dvh-13.5rem)*160/81)]"
         bool:data-mobile={mobile() && chessboard()}
       >
+        <Show when={ruleNotice()}>
+          {(notice) => (
+            <div class="fixed top-16 left-1/2 -translate-x-1/2 z-200 w-[min(92vw,28rem)] pointer-events-none">
+              <div class="rounded-xl bg-slate-800/95 text-white shadow-xl px-4 py-3">
+                <div class="flex items-center gap-2 mb-1.5">
+                  <i class="i-mdi-star-four-points text-yellow-300" />
+                  <span class="font-bold text-sm">
+                    {t("roundRulesTitle", { round: notice().round })}
+                  </span>
+                </div>
+                <Show
+                  when={notice().rules.length > 0}
+                  fallback={
+                    <p class="text-xs opacity-80">{t("roundRulesNone")}</p>
+                  }
+                >
+                  <ul class="space-y-1 text-xs">
+                    <For each={notice().rules}>
+                      {(ruleId) => (
+                        <li>
+                          <span class="font-bold text-yellow-200">
+                            {t(`rule_${ruleId}_name` as any)}
+                          </span>
+                          <span class="opacity-85">
+                            {t(`rule_${ruleId}_desc` as any)}
+                          </span>
+                        </li>
+                      )}
+                    </For>
+                  </ul>
+                </Show>
+                <Show when={notice().chaos}>
+                  <p class="mt-1.5 text-[11px] opacity-60">
+                    {t("roundRulesChaosHint")}
+                  </p>
+                </Show>
+              </div>
+            </div>
+          )}
+        </Show>
         <div class="group-data-[mobile]:fixed top-0 right-0 z-100 group-data-[mobile]:translate-x-100% group-data-[mobile]:rotate-90 transform-origin-top-left flex group-data-[mobile]:flex-col flex-row group-data-[mobile]:items-start items-center has-[:where(.visibility-control:checked)]:bg-white group-data-[mobile]:pl-[calc(var(--root-padding-top)+1rem)] group-data-[mobile]:p-4 rounded-br-2xl">
           <input
             hidden

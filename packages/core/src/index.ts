@@ -43,6 +43,9 @@ export {
   CHAOS_POOL,
   isRoomRuleId,
   roomRuleExtensionDefinition,
+  getRoomRules,
+  getRuleRuntime,
+  isRuleActiveThisRound,
 } from "./room_rules";
 export { type CommonSkillType } from "./base/skill";
 export {

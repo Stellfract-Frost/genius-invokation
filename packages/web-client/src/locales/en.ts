@@ -180,4 +180,7 @@ deckVersion: "Version",
   rule_forbiddenKnowledge_name: "Forbidden",
   rule_forbiddenKnowledge_desc:
     "At the start of the game, 6 Forbidden Knowledge cards are shuffled into each player's deck.",
+  roundRulesTitle: "Round {{round}} · Special Rules",
+  roundRulesNone: "No special rules in effect this round.",
+  roundRulesChaosHint: "Chaos: the rule drawn for this round is listed above.",
 } satisfies I18nDictionary;

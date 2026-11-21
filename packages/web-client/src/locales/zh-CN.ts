@@ -174,4 +174,7 @@ export default {
   rule_forbiddenKnowledge_name: "禁忌",
   rule_forbiddenKnowledge_desc:
     "对局开始时，双方牌库中随机塞入 6 张「禁忌知识」。",
+  roundRulesTitle: "第 {{round}} 回合 · 特殊规则",
+  roundRulesNone: "本回合没有生效的特殊规则。",
+  roundRulesChaosHint: "混沌：本回合随机抽到的规则已列在上方。",
 };
