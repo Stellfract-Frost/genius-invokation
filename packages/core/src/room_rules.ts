@@ -145,9 +145,6 @@ export const UNDERCURRENT_STACKS = 2;
 /** 禁忌知识开局塞入的张数 */
 export const FORBIDDEN_KNOWLEDGE_COUNT = 6;
 
-/** `variables.ruleCost` 取该值表示「没有受到变化规则影响」，按原始费用计算 */
-export const RULE_COST_NONE = -1;
-
 /** 部分规则需要直接引用数据层的定义 id */
 export const RULE_RELATED_DEFINITION_IDS = {
   /** 战斗状态：暗流的诅咒（使用元素战技/爆发时 +1 骰，可用 2 次） */
@@ -315,17 +312,19 @@ function pickSome(
 }
 
 /**
- * 「变化」：在**总费用不变**的前提下，把手上手牌的费用随机重新分配。
+ * 「变化」：在**总费用不变**的前提下，为每张手牌决定一个费用增量。
  *
- * 每张牌只会被增费（+1）、减费（-1）或不变，且增费与减费总是成对出现，
- * 因此所有手牌的元素骰费用总和严格守恒。传入的是每张牌的原始费用（不含
- * 能量与秘传），返回对应的新费用；同一张牌不会被同时增费和减费。
+ * 每张牌只会被增费（+1）、减费（-1）或不变（0），且增费与减费成对出现，
+ * 因此所有手牌的增量之和为 0，费用总和严格守恒。
+ *
+ * 返回的是**增量**而不是绝对费用：应用时叠加在当前费用之上，
+ * 这样其它效果（装备、支援、手牌 buff）给出的减费不会被覆盖。
  */
-export function redistributeShiftingCosts(
+export function redistributeShiftingDeltas(
   baseCosts: readonly number[],
   random: () => number,
 ): number[] {
-  const result = [...baseCosts];
+  const deltas = baseCosts.map(() => 0);
   const decreaseCandidates = baseCosts.flatMap((cost, index) =>
     cost > 0 ? [index] : [],
   );
@@ -335,20 +334,22 @@ export function redistributeShiftingCosts(
   );
   if (maxPairs === 0) {
     // 只剩 1 张牌或全部 0 费，无法成对调整
-    return result;
+    return deltas;
   }
   const pairs = 1 + (random() % maxPairs);
   const decreaseIndices = pickSome(decreaseCandidates, pairs, random);
   const increaseIndices = pickSome(
-    result.flatMap((_, index) => (decreaseIndices.includes(index) ? [] : [index])),
+    baseCosts.flatMap((_, index) =>
+      decreaseIndices.includes(index) ? [] : [index],
+    ),
     pairs,
     random,
   );
   for (const index of increaseIndices) {
-    result[index] = result[index]! + 1;
+    deltas[index] = 1;
   }
   for (const index of decreaseIndices) {
-    result[index] = result[index]! - 1;
+    deltas[index] = -1;
   }
-  return result;
+  return deltas;
 }

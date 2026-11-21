@@ -115,12 +115,11 @@ import {
   FORBIDDEN_KNOWLEDGE_COUNT,
   RESTRAINT_PLAY_LIMIT,
   RULE_EXTENSION_ID,
-  RULE_COST_NONE,
   RULE_RELATED_DEFINITION_IDS,
   RULE_PLACEHOLDER_SKILL,
   UNDERCURRENT_STACKS,
   drawChaosRule,
-  redistributeShiftingCosts,
+  redistributeShiftingDeltas,
   getPlayedCards,
   getRoomRules,
   getRuleRuntime,
@@ -487,26 +486,23 @@ export class Game {
       if (hands.length === 0) {
         continue;
       }
-      // 以「当前费用」为基准（包含此前变化规则的结果与其它费用修改），
-      // 而不是卡面原始费用，避免已经减费/增费的牌被重置
+      // 基准取「当前费用」（含装备/支援等修改，但不含变化的增量本身）
       const nextCosts = active
-        ? redistributeShiftingCosts(
+        ? redistributeShiftingDeltas(
             hands.map((card) =>
               diceCostSize(
-                applyAttachmentModifications(this.state, card).requiredCost,
+                applyAttachmentModifications(this.state, card, {
+                  ignoreRuleDelta: true,
+                }).requiredCost,
               ),
             ),
             () => this.mutator.stepRandom(),
           )
-        : hands.map(() => RULE_COST_NONE);
+        : hands.map(() => 0);
       hands.forEach((card, index) => {
-        const current = card.variables.ruleCost;
+        const current = card.variables.ruleCost ?? 0;
         const next = nextCosts[index]!;
         if (current === next) {
-          return;
-        }
-        // 规则本回合未生效时，只清理此前留下的覆盖值
-        if (!active && !(typeof current === "number" && current >= 0)) {
           return;
         }
         this.mutate({

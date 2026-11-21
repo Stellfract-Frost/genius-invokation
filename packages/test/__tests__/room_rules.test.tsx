@@ -5,7 +5,7 @@
 // published by the Free Software Foundation, either version 3 of the
 // License, or (at your option) any later version.
 
-import { ref, setup, Character, State, Card, $ } from "#test";
+import { ref, setup, Character, State, Card, DiceCount, $ } from "#test";
 import { test, expect } from "vitest";
 import { Game, exposeState } from "@gi-tcg/core";
 import { Venti } from "@gi-tcg/data/internal/characters/anemo/venti.gts";
@@ -117,18 +117,33 @@ test("extraDie: 回合开始额外获得 1 个万能骰", async () => {
   expect(c.state.players[1].dice.length).toBe(9);
 });
 
-test("shiftingCost: 手牌费用被固定值覆写", async () => {
+test("shiftingCost: 减费增量叠加在当前费用上", async () => {
   const target = ref();
   const c = setup(
     <State config={{ roomRules: ["shiftingCost"] }}>
       <Character my active def={Venti} v={{ health: 5 }} ref={target} />
       <Character opp active />
-      <Card my def={MondstadtHashBrown} v={{ ruleCost: 0 }} />
+      <Card my def={MondstadtHashBrown} v={{ ruleCost: -1 }} />
     </State>,
   );
-  // 原费用为 1，覆写为 0 后无需任何骰子即可打出
+  // 原费用 1 + 增量 -1 = 0，无需任何骰子即可打出
   await c.me.card(MondstadtHashBrown, target);
   c.expect($.my.active).toHaveVariable({ health: 7 });
+});
+
+test("shiftingCost: 增费增量叠加在当前费用上", async () => {
+  const target = ref();
+  const c = setup(
+    <State config={{ roomRules: ["shiftingCost"] }}>
+      <DiceCount my count={8} />
+      <Character my active def={Venti} v={{ health: 5 }} ref={target} />
+      <Character opp active />
+      <Card my def={MondstadtHashBrown} v={{ ruleCost: 1 }} />
+    </State>,
+  );
+  // 原费用 1 + 增量 1 = 2，应消耗 2 个骰子
+  await c.me.card(MondstadtHashBrown, target);
+  expect(c.state.players[0].dice.length).toBe(6);
 });
 
 test("shiftingCost: 未设置 ruleCost 的手牌仍按原费用计算", async () => {
@@ -157,17 +172,16 @@ test("shiftingCost: 回合开始时重分配，且手牌总费用不变", async 
   );
   await c.me.end();
   await c.opp.end();
-  const costs = c.state.players[0].hands.map(
-    (card) => card.variables.ruleCost,
+  const deltas = c.state.players[0].hands.map(
+    (card) => card.variables.ruleCost ?? 0,
   );
-  // 4 张 1 费牌，重分配后总和仍为 4
-  expect(costs.reduce((acc, value) => acc + (value ?? 0), 0)).toBe(4);
-  // 至少一张增费（2）、至少一张减费（0）
-  expect(costs.some((value) => value === 2)).toBe(true);
-  expect(costs.some((value) => value === 0)).toBe(true);
+  // 增费与减费成对，增量之和必须为 0
+  expect(deltas.reduce((acc, value) => acc + value, 0)).toBe(0);
+  expect(deltas.some((value) => value === 1)).toBe(true);
+  expect(deltas.some((value) => value === -1)).toBe(true);
 });
 
-test("shiftingCost: 以当前费用为基准，保留此前的增费/减费", async () => {
+test("shiftingCost: 上一回合的增量不参与本回合分配基准", async () => {
   const c = setup(
     <State config={{ roomRules: ["shiftingCost"] }}>
       <Character my active def={Venti} />
@@ -180,12 +194,12 @@ test("shiftingCost: 以当前费用为基准，保留此前的增费/减费", as
   );
   await c.me.end();
   await c.opp.end();
-  const costs = c.state.players[0].hands.map(
-    (card) => card.variables.ruleCost,
+  const deltas = c.state.players[0].hands.map(
+    (card) => card.variables.ruleCost ?? 0,
   );
-  // 当前总费用为 3 + 1 + 1 + 1 = 6，重分配后仍为 6
-  //（若错误地按卡面费用 1*4 计算，这里会变成 4）
-  expect(costs.reduce((acc, value) => acc + (value ?? 0), 0)).toBe(6);
+  // 旧增量（+1）被丢弃并重新分配，新增量之和仍为 0
+  expect(deltas.reduce((acc, value) => acc + value, 0)).toBe(0);
+  expect(deltas.every((value) => Math.abs(value) <= 1)).toBe(true);
 });
 
 test("shiftingCost: 没有规则时不会给手牌写入费用覆盖", async () => {

@@ -963,6 +963,7 @@ export function appendCost(
 export function applyAttachmentModifications(
   state: GameState,
   card: EntityState,
+  opt: { ignoreRuleDelta?: boolean } = {},
 ): ModifiedHandCardInformation {
   const { who } = getEntityArea(state, card.id);
   const playSkill = playSkillOfCard(card.definition);
@@ -1036,14 +1037,16 @@ export function applyAttachmentModifications(
       costs.set(DiceType.Legend, legendCost);
     }
   }
-  // 特殊规则「变化」：使用回合开始时分配好的费用覆写（能量 / 秘传费用不受影响）
-  const ruleCost = card.variables.ruleCost;
+  // 特殊规则「变化」：把回合开始时分配的增量叠加在当前费用之上，
+  // 而不是用绝对值覆写，避免盖掉装备 / 支援 / 手牌 buff 给出的减费
+  const ruleDelta = card.variables.ruleCost;
   if (
+    !opt.ignoreRuleDelta &&
     isRuleActiveThisRound(state, "shiftingCost") &&
-    typeof ruleCost === "number" &&
-    ruleCost >= 0
+    typeof ruleDelta === "number" &&
+    ruleDelta !== 0
   ) {
-    costs = shiftedCostOf(costs, ruleCost);
+    costs = shiftedCostOf(costs, Math.max(0, diceCostSize(costs) + ruleDelta));
   }
   return {
     requiredCost: normalizeCost(costs),
