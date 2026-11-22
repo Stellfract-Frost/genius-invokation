@@ -61,6 +61,8 @@ message PlayerState {
   repeated EntityState pile_card = 7;
   // 手牌数据
   repeated EntityState hand_card = 8;
+  // 弃牌堆数据
+  repeated EntityState discard_card = 10;
 
   PlayerStatus status = 9;
   

@@ -32,6 +32,8 @@ import { DEFAULT_VERSION_INFO } from "./base/version";
 export type RoomRuleId =
   /** 混沌：每回合随机一个正面规则，不重复，抽完重开一轮 */
   | "chaos"
+  /** 运转：弃牌堆机制（牌库 24 张、每回合抽 5 张、回合结束弃光手牌、牌库空时洗回弃牌堆） */
+  | "circulation"
   /** 抽牌：对局开始时手牌 7 张 */
   | "extraDraw"
   /** 变化：每回合开始时在总费用不变的前提下重新分配手牌费用 */
@@ -63,6 +65,13 @@ export interface RoomRuleMeta {
 }
 
 export const ROOM_RULES: readonly RoomRuleMeta[] = [
+  {
+    id: "circulation",
+    name: "运转",
+    description:
+      "牌库变为 24 张，每回合抽 5 张；回合结束时未打出的手牌（秘传除外）进入弃牌堆，牌库抽空时把弃牌堆洗回牌库。",
+    polarity: "special",
+  },
   {
     id: "chaos",
     name: "混沌",
@@ -155,6 +164,9 @@ export const EXTRA_DRAW_HANDS_COUNT = 7;
 
 /** 束缚每回合的可打出张数 */
 export const RESTRAINT_PLAY_LIMIT = 7;
+
+/** 「运转」每回合的抽牌数 */
+export const CIRCULATION_DRAW_COUNT = 5;
 
 /** 暗流每回合给予的「暗流的诅咒」层数 */
 export const UNDERCURRENT_STACKS = 2;

@@ -152,6 +152,9 @@ export default {
   specialRulesChaos: "混沌",
   specialRulesChaosDesc:
     "每回合随机获得一个增益规则，且不会重复；全部用完后重新开启一轮。选择混沌后将不能单独勾选其它规则。",
+  rule_circulation_name: "运转",
+  rule_circulation_desc:
+    "牌库变为 24 张，每回合抽 5 张；回合结束时未打出的手牌（秘传除外）进入弃牌堆，牌库抽空时把弃牌堆洗回牌库。",
   rule_chaos_name: "混沌",
   rule_chaos_desc:
     "每回合随机获得一个增益规则，且不会重复；全部用完后重新开启一轮。",

@@ -392,6 +392,9 @@ export function exposeMutation(
           parentMoved: PbRemoveEntityReason.PARENT_MOVED,
           costAttachmentNeutralized: PbRemoveEntityReason.COST_ATTACHMENT_NEUTRALIZED,
           selectedCardNotPlayed: PbRemoveEntityReason.SELECTED_CARD_NOT_PLAYED,
+          // 特殊规则「运转」：回合结束弃置按「舍弃」展示，洗回牌库不单独提示
+          ruleDiscard: PbRemoveEntityReason.DISCARDED,
+          reshuffle: PbRemoveEntityReason.UNSPECIFIED,
           unspecified: PbRemoveEntityReason.UNSPECIFIED,
         };
       return {
@@ -685,6 +688,8 @@ export function exposeState(who: 0 | 1, state: GameState): PbGameState {
       return {
         activeCharacterId: p.activeCharacterId,
         pileCard: p.pile.map((c) => exposeEntity(state, c, true)),
+        // 弃牌堆是公开信息，双方都能看到牌面
+        discardCard: p.discard.map((c) => exposeEntity(state, c, false)),
         handCard: p.hands.map((c) => exposeEntity(state, c, i !== who)),
         character: p.characters.map((ch) => exposeCharacter(state, p, ch)),
         dice,

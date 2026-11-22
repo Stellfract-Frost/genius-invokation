@@ -119,6 +119,7 @@ import {
   RULE_RELATED_DEFINITION_IDS,
   RULE_PLACEHOLDER_SKILL,
   UNDERCURRENT_STACKS,
+  CIRCULATION_DRAW_COUNT,
   drawChaosRule,
   increaseCostByOne,
   redistributeShiftingDeltas,
@@ -227,6 +228,7 @@ function initPlayerState(
     characters,
     initialPile,
     pile,
+    discard: [],
     hands: [],
     dice: [],
     combatStatuses: [],
@@ -561,6 +563,95 @@ export class Game {
     ];
     playedCards[who] += 1;
     this.setRuleRuntime({ ...runtime, playedCards });
+  }
+
+  /** 特殊规则「运转」：把未打出的手牌移入弃牌堆（秘传牌留在手上） */
+  private ruleMoveHandsToDiscard(who: 0 | 1) {
+    for (const card of [...this.state.players[who].hands]) {
+      if (card.definition.tags.includes("legend")) {
+        continue;
+      }
+      this.mutate({
+        type: "removeEntity",
+        from: { who, type: "hands", cardId: card.id },
+        oldState: card,
+        reason: "ruleDiscard",
+      });
+      this.mutate({
+        type: "createEntity",
+        target: { who, type: "discard", cardId: 0 },
+        value: { ...card, id: 0 },
+      });
+    }
+  }
+
+  /** 特殊规则「运转」：打出/调和的牌进入弃牌堆；秘传牌打出即消失 */
+  private ruleRecyclePlayedCard(
+    who: 0 | 1,
+    card: EntityState,
+    keepVariables: boolean,
+  ) {
+    if (!hasRule(this.state, "circulation")) {
+      return;
+    }
+    if (card.definition.tags.includes("legend")) {
+      return;
+    }
+    const removed = this.state.players[who].removedEntities.find(
+      (e) => e.id === card.id,
+    ) as EntityState | undefined;
+    // 装备牌、场地牌打出后会装配在场，不会进入已移除区，自然不进弃牌堆
+    if (!removed) {
+      return;
+    }
+    const variables = keepVariables
+      ? { ...removed.variables }
+      : Object.fromEntries(
+          Object.entries(card.definition.varConfigs).map(
+            ([name, { initialValue }]) => [name, initialValue],
+          ),
+        );
+    this.mutate({
+      type: "createEntity",
+      target: { who, type: "discard", cardId: 0 },
+      value: { ...removed, id: 0, variables },
+    });
+  }
+
+  /** 特殊规则「运转」：牌库不足时把弃牌堆洗回牌库（普通牌随机、禁忌知识均匀） */
+  private ruleRefillPileFromDiscard(who: 0 | 1) {
+    const player = this.state.players[who];
+    if (player.pile.length >= CIRCULATION_DRAW_COUNT) {
+      return;
+    }
+    const cards = [...player.discard];
+    if (cards.length === 0) {
+      return;
+    }
+    const forbiddenId = RULE_RELATED_DEFINITION_IDS.forbiddenKnowledge;
+    for (const card of cards) {
+      this.mutate({
+        type: "removeEntity",
+        from: { who, type: "discard", cardId: card.id },
+        oldState: card,
+        reason: "reshuffle",
+      });
+    }
+    const payloads = cards.map((card) => ({
+      type: "createEntity" as const,
+      target: { who, type: "pile" as const, cardId: 0 },
+      value: { ...card, id: 0 },
+    }));
+    this.mutator.insertPileCards(
+      payloads.filter((p) => p.value.definition.id !== forbiddenId),
+      "random",
+      who,
+    );
+    this.mutator.insertPileCards(
+      payloads.filter((p) => p.value.definition.id === forbiddenId),
+      "spaceAround",
+      who,
+    );
   }
 
   /** 特殊规则「疲劳」：记录某一方本回合用过的技能（同一技能只记一次） */
@@ -1157,6 +1248,8 @@ export class Game {
                   targets: actionInfo.targets,
                 });
               }
+              // 特殊规则「运转」：打出的事件牌进入弃牌堆，并重置为初始状态
+              this.ruleRecyclePlayedCard(who, card, false);
               await this.handleEvent(
                 "onPlayCard",
                 new PlayCardEventArg(this.state, actionInfo),
@@ -1183,6 +1276,8 @@ export class Game {
                 oldState: actionInfo.card,
                 reason: "elementalTuning",
               });
+              // 特殊规则「运转」：调和掉的牌同样进入弃牌堆（保留其上的效果）
+              this.ruleRecyclePlayedCard(who, actionInfo.card, true);
               const targetDice = actionInfo.result;
               this.mutate({
                 type: "resetDice",
@@ -1249,8 +1344,21 @@ export class Game {
     await this.handleEvent("onEndPhase", new EventArg(this.state));
     // 特殊规则「回复」：回合结束双方全体角色回复 1 点生命
     await this.ruleOnRoundEnd();
+    // 特殊规则「运转」：未打出的手牌进入弃牌堆（紧跟抽牌之前，不插入其它结算）
+    const circulation = hasRule(this.state, "circulation");
+    if (circulation) {
+      for (const who of [0, 1] as const) {
+        this.ruleMoveHandsToDiscard(who);
+      }
+    }
     for (const who of [this.state.currentTurn, flip(this.state.currentTurn)]) {
-      const { events } = this.mutator.drawCardsPlain(who, 2);
+      if (circulation) {
+        this.ruleRefillPileFromDiscard(who);
+      }
+      const { events } = this.mutator.drawCardsPlain(
+        who,
+        circulation ? CIRCULATION_DRAW_COUNT : 2,
+      );
       await this.handleEvents(events);
     }
     await this.handleEvent("onRoundEnd", new EventArg(this.state));

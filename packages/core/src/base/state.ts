@@ -189,6 +189,8 @@ export interface PlayerState {
   readonly who: 0 | 1;
   readonly initialPile: readonly EntityDefinition[];
   readonly pile: readonly EntityState[];
+  /** 弃牌堆（「运转」规则使用；打出的事件牌、回合结束未打出的手牌会进入这里） */
+  readonly discard: readonly EntityState[];
   readonly activeCharacterId: number;
   readonly hands: readonly EntityState[];
   readonly characters: readonly CharacterState[];

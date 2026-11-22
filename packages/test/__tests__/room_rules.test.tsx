@@ -458,3 +458,48 @@ test("forbiddenKnowledge: 禁忌知识均匀分布在牌库中", async () => {
     expect(indices[i]! - indices[i - 1]!).toBeGreaterThan(1);
   }
 });
+
+test("circulation: 回合结束未打出的手牌进入弃牌堆，并洗回牌库抽出", async () => {
+  const c = setup(
+    <State config={{ roomRules: ["circulation"] }}>
+      <Character my active def={Venti} />
+      <Character opp active />
+      <Card my def={MondstadtHashBrown} />
+      <Card my def={MondstadtHashBrown} />
+    </State>,
+  );
+  await c.me.end();
+  await c.opp.end();
+  // 2 张手牌进弃牌堆 -> 牌库不足 5 张时洗回 -> 重新抽到手上
+  expect(c.state.players[0].discard.length).toBe(0);
+  expect(c.state.players[0].hands.length).toBe(2);
+});
+
+test("circulation: 打出的事件牌进入弃牌堆", async () => {
+  const c = setup(
+    <State config={{ roomRules: ["circulation"] }}>
+      <Character my active def={Venti} />
+      <Character my def={Venti} />
+      <Character opp active />
+      <Card my def={ChangingShifts} />
+    </State>,
+  );
+  await c.me.card(ChangingShifts);
+  expect(c.state.players[0].hands.length).toBe(0);
+  expect(c.state.players[0].discard.length).toBe(1);
+  expect(c.state.players[0].discard[0]!.definition.id).toBe(332002);
+});
+
+test("circulation: 没有该规则时手牌不会在回合结束被弃置", async () => {
+  const c = setup(
+    <State>
+      <Character my active def={Venti} />
+      <Character opp active />
+      <Card my def={MondstadtHashBrown} />
+    </State>,
+  );
+  await c.me.end();
+  await c.opp.end();
+  expect(c.state.players[0].hands.length).toBe(1);
+  expect(c.state.players[0].discard.length).toBe(0);
+});

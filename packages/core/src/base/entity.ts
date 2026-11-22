@@ -95,7 +95,7 @@ export type EntityArea =
       readonly who: 0 | 1;
     }
   | {
-      readonly type: "pile" | "hands";
+      readonly type: "pile" | "hands" | "discard";
       readonly who: 0 | 1;
       readonly cardId: number;
     }

@@ -114,6 +114,7 @@ interface RoomRuleUi {
  * 这里不直接 import core，是为了避免前端包新增对 core 的依赖。
  */
 const ROOM_RULE_UI: RoomRuleUi[] = [
+  { id: "circulation", polarity: "special" },
   { id: "chaos", polarity: "special" },
   { id: "extraDraw", polarity: "buff" },
   { id: "shiftingCost", polarity: "buff" },
@@ -126,6 +127,10 @@ const ROOM_RULE_UI: RoomRuleUi[] = [
   { id: "noHeal", polarity: "debuff" },
   { id: "forbiddenKnowledge", polarity: "debuff" },
 ];
+
+const SPECIAL_RULES = ROOM_RULE_UI.filter(
+  (rule) => rule.polarity === "special",
+);
 
 const BUFF_RULES = ROOM_RULE_UI.filter((rule) => rule.polarity === "buff");
 const DEBUFF_RULES = ROOM_RULE_UI.filter(
@@ -465,17 +470,23 @@ export function RoomDialog(props: RoomDialogProps) {
               <h4 class="text-lg mb-1">{t("specialRules")}</h4>
               <p class="text-xs text-gray-500 mb-2">{t("specialRulesHint")}</p>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
-                <div
-                  class="b-1 b-gray-400 rounded-lg p-2 select-none transition-colors cursor-pointer hover:bg-yellow-50 data-[active=true]:b-slate-500 data-[active=true]:b-2 data-[disabled=true]:pointer-events-none"
-                  data-active={roomRules().includes("chaos")}
-                  data-disabled={!editable()}
-                  onClick={() => toggleRule("chaos")}
-                >
-                  <h5 class="font-bold text-sm">{t("specialRulesChaos")}</h5>
-                  <p class="text-xs text-gray-500 leading-snug">
-                    {t("specialRulesChaosDesc")}
-                  </p>
-                </div>
+                <For each={SPECIAL_RULES}>
+                  {(rule) => (
+                    <div
+                      class="b-1 b-gray-400 rounded-lg p-2 select-none transition-colors cursor-pointer hover:bg-yellow-50 data-[active=true]:b-slate-500 data-[active=true]:b-2 data-[disabled=true]:pointer-events-none"
+                      data-active={roomRules().includes(rule.id)}
+                      data-disabled={!editable()}
+                      onClick={() => toggleRule(rule.id)}
+                    >
+                      <h5 class="font-bold text-sm">
+                        {t(`rule_${rule.id}_name` as any)}
+                      </h5>
+                      <p class="text-xs text-gray-500 leading-snug">
+                        {t(`rule_${rule.id}_desc` as any)}
+                      </p>
+                    </div>
+                  )}
+                </For>
               </div>
               <h5 class="text-sm font-bold text-gray-500 mb-1">
                 {t("specialRulesBuff")}

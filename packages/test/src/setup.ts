@@ -236,6 +236,7 @@ function emptyPlayerState(who: 0 | 1): Draft<PlayerState> {
     summons: [],
     supports: [],
     hands: [],
+    discard: [],
     removedEntities: [],
     declaredEnd: false,
     canCharged: false,

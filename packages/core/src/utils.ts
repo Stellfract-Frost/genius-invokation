@@ -102,7 +102,7 @@ export type RegularTypeAreaTypeMap<Ty extends ExEntityType> =
   | (Ty extends "summon" ? "summons" : never)
   | (Ty extends "support" ? "supports" : never)
   | (Ty extends "eventCard" | "support" | "equipment" | "attachment"
-      ? "hands" | "pile"
+      ? "hands" | "pile" | "discard"
       : never);
 
 export type TypeAreaTypeMap<Ty extends ExEntityType> =
@@ -532,6 +532,7 @@ export function removeEntity(state: Draft<GameState>, id: number): AnyState {
       "supports",
       "hands",
       "pile",
+      "discard",
     ] as const) {
       const area = player[key];
       for (let i = 0; i < area.length; i++) {

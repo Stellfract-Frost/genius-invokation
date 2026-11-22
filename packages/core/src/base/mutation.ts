@@ -146,6 +146,9 @@ export interface RemoveEntityM {
     | "eventCardPlayed"
     | "eventCardDrawn"
     | "elementalTuning"
+    // 特殊规则「运转」
+    | "ruleDiscard"
+    | "reshuffle"
     | "overflow"
     | "eventCardPlayNoEffect"
     | "equipOverridden"
