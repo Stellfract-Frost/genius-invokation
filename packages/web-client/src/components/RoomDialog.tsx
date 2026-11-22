@@ -119,6 +119,8 @@ const ROOM_RULE_UI: RoomRuleUi[] = [
   { id: "shiftingCost", polarity: "buff" },
   { id: "regeneration", polarity: "buff" },
   { id: "extraDie", polarity: "buff" },
+  { id: "doubleHealth", polarity: "buff" },
+  { id: "skillFatigue", polarity: "debuff" },
   { id: "undercurrent", polarity: "debuff" },
   { id: "restraint", polarity: "debuff" },
   { id: "noHeal", polarity: "debuff" },

@@ -20,6 +20,7 @@ import {
   type ExposedMutation,
   type RpcMethod,
   type DiceRequirement,
+  type ReadonlyDiceRequirement,
   PbPlayerStatus,
   type RpcRequestPayloadOf,
   type RpcResponsePayloadOf,
@@ -119,6 +120,7 @@ import {
   RULE_PLACEHOLDER_SKILL,
   UNDERCURRENT_STACKS,
   drawChaosRule,
+  increaseCostByOne,
   redistributeShiftingDeltas,
   getPlayedCards,
   getRoomRules,
@@ -186,16 +188,22 @@ function initPlayerState(
   }
   const characters: CharacterState[] = [];
   const pile: EntityState[] = [];
+  const doubleHealth = gameConfig.roomRules?.includes("doubleHealth") ?? false;
   for (const definition of characterDefs) {
+    const variables: Record<string, number> = Object.fromEntries(
+      Object.entries(definition.varConfigs).map(
+        ([name, { initialValue }]) => [name, initialValue],
+      ),
+    );
+    if (doubleHealth) {
+      variables.maxHealth = (variables.maxHealth ?? 10) * 2;
+      variables.health = (variables.health ?? 10) * 2;
+    }
     characters.push({
       [StateSymbol]: "character",
       id: idIter.id,
       definition,
-      variables: Object.fromEntries(
-        Object.entries(definition.varConfigs).map(
-          ([name, { initialValue }]) => [name, initialValue],
-        ),
-      ) as any,
+      variables: variables as any,
       entities: [],
     });
   }
@@ -415,7 +423,7 @@ export class Game {
           attachments: [],
         },
       }));
-      this.mutator.insertPileCards(payloads, "random", who);
+      this.mutator.insertPileCards(payloads, "spaceAround", who);
     }
   }
 
@@ -551,6 +559,34 @@ export class Game {
     ];
     playedCards[who] += 1;
     this.setRuleRuntime({ ...runtime, playedCards });
+  }
+
+  /** 特殊规则「疲劳」：记录技能已被使用（同一技能只记一次） */
+  private ruleMarkSkillUsed(skillId: number) {
+    if (!hasRule(this.state, "skillFatigue")) {
+      return;
+    }
+    const runtime = getRuleRuntime(this.state);
+    if (runtime.usedSkills.includes(skillId)) {
+      return;
+    }
+    this.setRuleRuntime({
+      ...runtime,
+      usedSkills: [...runtime.usedSkills, skillId],
+    });
+  }
+
+  /** 特殊规则「疲劳」：已用过的技能费用 +1（上限 +1） */
+  private ruleFatiguedCost(
+    skillId: number,
+    cost: ReadonlyDiceRequirement,
+  ): ReadonlyDiceRequirement {
+    if (!hasRule(this.state, "skillFatigue")) {
+      return cost;
+    }
+    return getRuleRuntime(this.state).usedSkills.includes(skillId)
+      ? increaseCostByOne(cost)
+      : cost;
   }
 
   get detailLog() {
@@ -1089,6 +1125,8 @@ export class Game {
                 "onUseSkill",
                 new UseSkillEventArg(this.state, callerArea, actionInfo.skill),
               );
+              // 特殊规则「疲劳」：记录该技能已被使用
+              this.ruleMarkSkillUsed(actionInfo.skill.definition.id);
               break;
             }
             case "playCard": {
@@ -1246,6 +1284,11 @@ export class Game {
         caller,
         definition: skill,
       });
+      // 特殊规则「疲劳」：用过的技能费用 +1
+      const skillCost = this.ruleFatiguedCost(
+        skill.id,
+        skill.initiativeSkillConfig.requiredCost,
+      );
       const actionInfoBase = {
         type: "useSkill" as const,
         who,
@@ -1253,8 +1296,8 @@ export class Game {
         targets: [],
         fast: skill.initiativeSkillConfig.shouldFast,
         originalFast: skill.initiativeSkillConfig.shouldFast,
-        cost: skill.initiativeSkillConfig.requiredCost,
-        originalCost: skill.initiativeSkillConfig.requiredCost,
+        cost: skillCost,
+        originalCost: skillCost,
         autoSelectedDice: [],
       };
       if (skillDisabled) {

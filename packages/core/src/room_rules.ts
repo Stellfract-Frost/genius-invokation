@@ -34,15 +34,19 @@ export type RoomRuleId =
   | "chaos"
   /** 抽牌：对局开始时手牌 7 张 */
   | "extraDraw"
-  /** 变化：手牌元素骰费用在 0~3 随机 */
+  /** 变化：每回合开始时在总费用不变的前提下重新分配手牌费用 */
   | "shiftingCost"
   /** 回复：每回合结束双方全体回复 1 点生命 */
   | "regeneration"
   /** 增费：每回合开始获得 1 个万能元素骰 */
   | "extraDie"
-  /** 暗流：每回合开始双方各获得 2 层「暗流的诅咒」 */
+  /** 膨胀：双方角色生命上限与当前生命翻倍 */
+  | "doubleHealth"
+  /** 疲劳：技能用过一次后费用 +1（上限 +1） */
+  | "skillFatigue"
+  /** 暗流：奇数回合开始双方各获得 2 层「暗流的诅咒」 */
   | "undercurrent"
-  /** 束缚：每回合最多打出 3 张手牌 */
+  /** 束缚：每回合最多打出 7 张手牌 */
   | "restraint"
   /** 禁疗：治疗量归零（复活除外） */
   | "noHeal"
@@ -91,6 +95,19 @@ export const ROOM_RULES: readonly RoomRuleMeta[] = [
     polarity: "buff",
   },
   {
+    id: "doubleHealth",
+    name: "膨胀",
+    description: "双方所有角色的生命上限翻倍，当前生命同步翻倍。",
+    polarity: "buff",
+  },
+  {
+    id: "skillFatigue",
+    name: "疲劳",
+    description:
+      "每个技能（含普通攻击）使用过一次后，再次使用该技能时费用 +1（最多 +1）。",
+    polarity: "debuff",
+  },
+  {
     id: "undercurrent",
     name: "暗流",
     description:
@@ -100,7 +117,7 @@ export const ROOM_RULES: readonly RoomRuleMeta[] = [
   {
     id: "restraint",
     name: "束缚",
-    description: "每回合最多只能打出 3 张手牌。",
+    description: "每回合最多只能打出 7 张手牌。",
     polarity: "debuff",
   },
   {
@@ -137,7 +154,7 @@ export const CHAOS_EXTRA_DRAW_COUNT = 2;
 export const EXTRA_DRAW_HANDS_COUNT = 7;
 
 /** 束缚每回合的可打出张数 */
-export const RESTRAINT_PLAY_LIMIT = 3;
+export const RESTRAINT_PLAY_LIMIT = 7;
 
 /** 暗流每回合给予的「暗流的诅咒」层数 */
 export const UNDERCURRENT_STACKS = 2;
@@ -163,12 +180,15 @@ export interface RoomRuleRuntimeState {
   readonly chaosActive: RoomRuleId | null;
   /** 本回合双方已打出的手牌数 */
   readonly playedCards: readonly [number, number];
+  /** 已经用过的技能定义 id（「疲劳」规则使用，只记录一次） */
+  readonly usedSkills: readonly number[];
 }
 
 const DEFAULT_RUNTIME_STATE: RoomRuleRuntimeState = {
   chaosRemaining: CHAOS_POOL,
   chaosActive: null,
   playedCards: [0, 0],
+  usedSkills: [],
 };
 
 /** 规则状态载体 extension 的保留 id，避开数据层定义 */
@@ -295,6 +315,36 @@ export function shiftedCostOf(
   if (legend > 0) {
     result.set(DiceType.Legend, legend);
   }
+  return result;
+}
+
+/**
+ * 「疲劳」：给技能的所需骰子整体 +1。
+ *
+ * 加价优先落在**无色骰**上（普通攻击本身就是「元素 1 + 无色 2」，加价应为无色），
+ * 没有无色部分时才加在同元素骰上，仍找不到就退化成万能骰。
+ */
+export function increaseCostByOne(
+  originalCost: ReadonlyMap<DiceType, number>,
+): DiceRequirement {
+  const result: DiceRequirement = new Map(originalCost);
+  const voidCount = result.get(DiceType.Void) ?? 0;
+  if (voidCount > 0) {
+    result.set(DiceType.Void, voidCount + 1);
+    return result;
+  }
+  let elementType: DiceType | null = null;
+  for (const [type, count] of originalCost) {
+    if (type === DiceType.Energy || type === DiceType.Legend) {
+      continue;
+    }
+    if (count > 0) {
+      elementType = type;
+      break;
+    }
+  }
+  const targetType = elementType ?? DiceType.Aligned;
+  result.set(targetType, (result.get(targetType) ?? 0) + 1);
   return result;
 }
 

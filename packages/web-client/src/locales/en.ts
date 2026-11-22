@@ -169,11 +169,17 @@ deckVersion: "Version",
   rule_extraDie_name: "Surge",
   rule_extraDie_desc:
     "At the start of each round, both players gain 1 Omni die.",
+  rule_doubleHealth_name: "Inflation",
+  rule_doubleHealth_desc:
+    "All characters on both sides have their Max HP doubled, and current HP doubled as well.",
+  rule_skillFatigue_name: "Fatigue",
+  rule_skillFatigue_desc:
+    "Once a skill (including Normal Attack) has been used, using it again costs 1 more die (at most +1).",
   rule_undercurrent_name: "Undercurrent",
   rule_undercurrent_desc:
     "At the start of every odd-numbered round, both players gain 2 stacks of Curse of the Undercurrent (Elemental Skill/Burst costs 1 more die; 2 usages).",
   rule_restraint_name: "Restraint",
-  rule_restraint_desc: "At most 3 cards can be played each round.",
+  rule_restraint_desc: "At most 7 cards can be played each round.",
   rule_noHeal_name: "No Heal",
   rule_noHeal_desc:
     "All healing becomes 0 (revival excluded); healing still resolves normally.",

@@ -8,7 +8,12 @@
 import { ref, setup, Character, State, Card, DiceCount, $ } from "#test";
 import { test, expect } from "vitest";
 import { Game, exposeState } from "@gi-tcg/core";
-import { Venti } from "@gi-tcg/data/internal/characters/anemo/venti.gts";
+import getData from "@gi-tcg/data";
+import {
+  DivineMarksmanship,
+  SkywardSonnet,
+  Venti,
+} from "@gi-tcg/data/internal/characters/anemo/venti.gts";
 import { MondstadtHashBrown } from "@gi-tcg/data/internal/cards/event/food.gts";
 import { ChangingShifts } from "@gi-tcg/data/internal/cards/event/other.gts";
 import { CurseOfTheUndercurrent } from "@gi-tcg/data/internal/characters/hydro/abyss_herald_wicked_torrents.gts";
@@ -219,7 +224,7 @@ test("shiftingCost: 没有规则时不会给手牌写入费用覆盖", async () 
   expect(costs.every((value) => typeof value === "undefined")).toBe(true);
 });
 
-test("restraint: 每回合最多打出 3 张手牌", async () => {
+test("restraint: 每回合最多打出 7 张手牌", async () => {
   const c = setup(
     <State config={{ roomRules: ["restraint"] }}>
       <Character my active def={Venti} />
@@ -229,11 +234,16 @@ test("restraint: 每回合最多打出 3 张手牌", async () => {
       <Card my def={ChangingShifts} />
       <Card my def={ChangingShifts} />
       <Card my def={ChangingShifts} />
+      <Card my def={ChangingShifts} />
+      <Card my def={ChangingShifts} />
+      <Card my def={ChangingShifts} />
+      <Card my def={ChangingShifts} />
+      <Card my def={ChangingShifts} />
     </State>,
   );
-  await c.me.card(ChangingShifts);
-  await c.me.card(ChangingShifts);
-  await c.me.card(ChangingShifts);
+  for (let i = 0; i < 7; i++) {
+    await c.me.card(ChangingShifts);
+  }
   await expect(c.me.card(ChangingShifts)).rejects.toThrow();
 });
 
@@ -325,4 +335,106 @@ test("state: 混沌局暴露本回合抽到的规则", async () => {
   const exposed = exposeState(0, c.state);
   expect(exposed.chaosEnabled).toBe(true);
   expect(exposed.activeRule.length).toBe(1);
+});
+
+test("doubleHealth: 双方角色生命上限与当前生命翻倍", () => {
+  const cards = Array.from({ length: 30 }, () => 333006);
+  const state = Game.createInitialState({
+    decks: [
+      { characters: [1301, 1103, 1501], cards },
+      { characters: [1301, 1103, 1501], cards },
+    ],
+    data: getData(),
+    roomRules: ["doubleHealth"],
+  });
+  for (const who of [0, 1] as const) {
+    for (const character of state.players[who].characters) {
+      expect(character.variables.maxHealth).toBe(20);
+      expect(character.variables.health).toBe(20);
+    }
+  }
+});
+
+test("skillFatigue: 技能用过一次后费用 +1", async () => {
+  const c = setup(
+    <State config={{ roomRules: ["skillFatigue"] }}>
+      <DiceCount my count={12} />
+      <Character my active def={Venti} />
+      <Character opp active def={Venti} />
+    </State>,
+  );
+  // 普攻原本 3 费（1 风 + 2 无色）
+  await c.me.skill(DivineMarksmanship);
+  expect(c.state.players[0].dice.length).toBe(9);
+  // 对手先结束回合，把行动权交还给我
+  await c.opp.end();
+  // 再次使用同一技能：费用 +1 => 4 费，且加的是**无色骰**（1 风 + 3 无色）
+  {
+    const actions = await (c as any).game.availableActions();
+    const attack = actions.find(
+      (a: any) => a.skill?.definition.id === 15031 && a.validity === 0,
+    );
+    expect(
+      [...(attack.cost as Map<number, number>).entries()].sort(
+        (x, y) => x[0] - y[0],
+      ),
+    ).toEqual([
+      [0, 3],
+      [5, 1],
+    ]);
+  }
+  await c.me.skill(DivineMarksmanship);
+  expect(c.state.players[0].dice.length).toBe(5);
+});
+
+test("skillFatigue: 未使用过的技能不加价", async () => {
+  const c = setup(
+    <State config={{ roomRules: ["skillFatigue"] }}>
+      <DiceCount my count={12} />
+      <Character my active def={Venti} />
+      <Character opp active def={Venti} />
+    </State>,
+  );
+  // 元素战技 3 费，未使用过，按原价
+  await c.me.skill(SkywardSonnet);
+  expect(c.state.players[0].dice.length).toBe(9);
+});
+
+test("forbiddenKnowledge: 禁忌知识均匀分布在牌库中", async () => {
+  const c = setup(
+    <State phase="initHands" config={{ roomRules: ["forbiddenKnowledge"] }}>
+      <Character my def={Venti} />
+      <Character opp def={Venti} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+    </State>,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  const pile = c.state.players[0].pile;
+  const indices = pile.flatMap((card, index) =>
+    card.definition.id === 301020 ? [index] : [],
+  );
+  expect(indices.length).toBe(6);
+  for (let i = 1; i < indices.length; i++) {
+    // 均匀插入后任意两张禁忌之间至少隔一张牌
+    expect(indices[i]! - indices[i - 1]!).toBeGreaterThan(1);
+  }
 });

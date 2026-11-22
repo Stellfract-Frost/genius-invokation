@@ -164,11 +164,16 @@ export default {
   rule_regeneration_desc: "每回合结束时，双方所有角色回复 1 点生命。",
   rule_extraDie_name: "增费",
   rule_extraDie_desc: "每回合开始时，双方各获得 1 个万能元素骰。",
+  rule_doubleHealth_name: "膨胀",
+  rule_doubleHealth_desc: "双方所有角色的生命上限翻倍，当前生命同步翻倍。",
+  rule_skillFatigue_name: "疲劳",
+  rule_skillFatigue_desc:
+    "每个技能（含普通攻击）使用过一次后，再次使用该技能时费用 +1（最多 +1）。",
   rule_undercurrent_name: "暗流",
   rule_undercurrent_desc:
     "每奇数回合开始时，双方各获得 2 层「暗流的诅咒」：使用元素战技或元素爆发时多花费 1 个元素骰，可用 2 次。",
   rule_restraint_name: "束缚",
-  rule_restraint_desc: "每回合最多只能打出 3 张手牌。",
+  rule_restraint_desc: "每回合最多只能打出 7 张手牌。",
   rule_noHeal_name: "禁疗",
   rule_noHeal_desc: "所有治疗量变为 0（复活除外），治疗仍会正常结算。",
   rule_forbiddenKnowledge_name: "禁忌",
