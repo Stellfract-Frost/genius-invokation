@@ -174,7 +174,7 @@ deckVersion: "Version",
     "All characters on both sides have their Max HP doubled, and current HP doubled as well.",
   rule_skillFatigue_name: "Fatigue",
   rule_skillFatigue_desc:
-    "Once a skill (including Normal Attack) has been used, using it again costs 1 more die (at most +1).",
+    "Within a round, once a skill (including Normal Attack) has been used, using it again costs 1 more die (at most +1). Resets each round and is tracked separately for each player.",
   rule_undercurrent_name: "Undercurrent",
   rule_undercurrent_desc:
     "At the start of every odd-numbered round, both players gain 2 stacks of Curse of the Undercurrent (Elemental Skill/Burst costs 1 more die; 2 usages).",

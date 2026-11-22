@@ -104,7 +104,7 @@ export const ROOM_RULES: readonly RoomRuleMeta[] = [
     id: "skillFatigue",
     name: "疲劳",
     description:
-      "每个技能（含普通攻击）使用过一次后，再次使用该技能时费用 +1（最多 +1）。",
+      "本回合内，每个技能（含普通攻击）使用过一次后，再次使用该技能时费用 +1（最多 +1），下回合重置；双方独立计算。",
     polarity: "debuff",
   },
   {
@@ -180,15 +180,18 @@ export interface RoomRuleRuntimeState {
   readonly chaosActive: RoomRuleId | null;
   /** 本回合双方已打出的手牌数 */
   readonly playedCards: readonly [number, number];
-  /** 已经用过的技能定义 id（「疲劳」规则使用，只记录一次） */
-  readonly usedSkills: readonly number[];
+  /**
+   * 本回合双方各自已经用过的技能定义 id（「疲劳」规则使用）。
+   * 下标 0/1 对应玩家，回合开始时清空，双方互不影响。
+   */
+  readonly usedSkills: readonly [readonly number[], readonly number[]];
 }
 
 const DEFAULT_RUNTIME_STATE: RoomRuleRuntimeState = {
   chaosRemaining: CHAOS_POOL,
   chaosActive: null,
   playedCards: [0, 0],
-  usedSkills: [],
+  usedSkills: [[], []],
 };
 
 /** 规则状态载体 extension 的保留 id，避开数据层定义 */

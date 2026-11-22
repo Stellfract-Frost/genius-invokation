@@ -436,6 +436,8 @@ export class Game {
     let next: RoomRuleRuntimeState = {
       ...runtime,
       playedCards: [0, 0],
+      // 「疲劳」按回合重置，双方各自独立
+      usedSkills: [[], []],
     };
     if (hasRule(this.state, "chaos")) {
       next = drawChaosRule(next, () => this.mutator.stepRandom());
@@ -561,30 +563,34 @@ export class Game {
     this.setRuleRuntime({ ...runtime, playedCards });
   }
 
-  /** 特殊规则「疲劳」：记录技能已被使用（同一技能只记一次） */
-  private ruleMarkSkillUsed(skillId: number) {
+  /** 特殊规则「疲劳」：记录某一方本回合用过的技能（同一技能只记一次） */
+  private ruleMarkSkillUsed(who: 0 | 1, skillId: number) {
     if (!hasRule(this.state, "skillFatigue")) {
       return;
     }
     const runtime = getRuleRuntime(this.state);
-    if (runtime.usedSkills.includes(skillId)) {
+    const used = runtime.usedSkills[who];
+    if (used.includes(skillId)) {
       return;
     }
-    this.setRuleRuntime({
-      ...runtime,
-      usedSkills: [...runtime.usedSkills, skillId],
-    });
+    const usedSkills: [readonly number[], readonly number[]] = [
+      [...runtime.usedSkills[0]],
+      [...runtime.usedSkills[1]],
+    ];
+    usedSkills[who] = [...used, skillId];
+    this.setRuleRuntime({ ...runtime, usedSkills });
   }
 
-  /** 特殊规则「疲劳」：已用过的技能费用 +1（上限 +1） */
+  /** 特殊规则「疲劳」：该方本回合已用过的技能费用 +1（上限 +1） */
   private ruleFatiguedCost(
+    who: 0 | 1,
     skillId: number,
     cost: ReadonlyDiceRequirement,
   ): ReadonlyDiceRequirement {
     if (!hasRule(this.state, "skillFatigue")) {
       return cost;
     }
-    return getRuleRuntime(this.state).usedSkills.includes(skillId)
+    return getRuleRuntime(this.state).usedSkills[who].includes(skillId)
       ? increaseCostByOne(cost)
       : cost;
   }
@@ -1125,8 +1131,11 @@ export class Game {
                 "onUseSkill",
                 new UseSkillEventArg(this.state, callerArea, actionInfo.skill),
               );
-              // 特殊规则「疲劳」：记录该技能已被使用
-              this.ruleMarkSkillUsed(actionInfo.skill.definition.id);
+              // 特殊规则「疲劳」：记录该技能本回合已被使用
+              this.ruleMarkSkillUsed(
+                this.state.currentTurn,
+                actionInfo.skill.definition.id,
+              );
               break;
             }
             case "playCard": {
@@ -1286,6 +1295,7 @@ export class Game {
       });
       // 特殊规则「疲劳」：用过的技能费用 +1
       const skillCost = this.ruleFatiguedCost(
+        who,
         skill.id,
         skill.initiativeSkillConfig.requiredCost,
       );

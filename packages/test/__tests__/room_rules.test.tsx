@@ -387,6 +387,26 @@ test("skillFatigue: 技能用过一次后费用 +1", async () => {
   expect(c.state.players[0].dice.length).toBe(5);
 });
 
+test("skillFatigue: 双方技能记录互不影响", async () => {
+  const c = setup(
+    <State config={{ roomRules: ["skillFatigue"] }}>
+      <DiceCount my count={12} />
+      <DiceCount opp count={12} />
+      <Character my active def={Venti} />
+      <Character opp active def={Venti} />
+    </State>,
+  );
+  // 我方先用一次普攻
+  await c.me.skill(DivineMarksmanship);
+  expect(c.state.players[0].dice.length).toBe(9);
+  // 对手第一次使用同一技能，仍按原价 3 费（不共享我方的记录）
+  await c.opp.skill(DivineMarksmanship);
+  expect(c.state.players[1].dice.length).toBe(9);
+  // 我方第二次使用才 +1 => 4 费
+  await c.me.skill(DivineMarksmanship);
+  expect(c.state.players[0].dice.length).toBe(5);
+});
+
 test("skillFatigue: 未使用过的技能不加价", async () => {
   const c = setup(
     <State config={{ roomRules: ["skillFatigue"] }}>

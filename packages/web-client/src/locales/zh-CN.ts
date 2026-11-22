@@ -168,7 +168,7 @@ export default {
   rule_doubleHealth_desc: "双方所有角色的生命上限翻倍，当前生命同步翻倍。",
   rule_skillFatigue_name: "疲劳",
   rule_skillFatigue_desc:
-    "每个技能（含普通攻击）使用过一次后，再次使用该技能时费用 +1（最多 +1）。",
+    "本回合内，每个技能（含普通攻击）使用过一次后，再次使用该技能时费用 +1（最多 +1），下回合重置；双方独立计算。",
   rule_undercurrent_name: "暗流",
   rule_undercurrent_desc:
     "每奇数回合开始时，双方各获得 2 层「暗流的诅咒」：使用元素战技或元素爆发时多花费 1 个元素骰，可用 2 次。",
