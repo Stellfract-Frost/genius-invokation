@@ -427,20 +427,12 @@ export class ProfilesService {
 
   list() {
     const all = [...this.profiles.values()];
-    // 练习/比赛合并 profile 是临时缓存，历史上每换一次版本池就会多一个；
-    // 规则配置里只保留最后创建的那个“比赛版本”，其余仍可按 id 访问。
-    const lastPractice = all
-      .filter(({ summary }) => summary.id.startsWith("practice/"))
-      .at(-1);
-    const visible = lastPractice
-      ? all.filter(
-          (p) =>
-            p === lastPractice || !p.summary.id.startsWith("practice/"),
-        )
-      : all;
+    // 全部列出。practice/* 是按版本池即时生成的比赛配置，此前这里只保留
+    // 最后一个，导致换个版本池之后上一份就“消失”，无法再选回。
+    // 现在按创建顺序全部返回（新的在后），默认选中的仍是官方最新版。
     return {
       defaultProfileId: this.defaultProfileId,
-      profiles: visible.map(({ summary }) => summary),
+      profiles: all.map(({ summary }) => summary),
     };
   }
 }
