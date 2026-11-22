@@ -14,6 +14,8 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 export default {
+  discardPile: "弃牌堆",
+  discardPileEmpty: "弃牌堆是空的",
   reaction: {
     Melt: "融化",
     Vaporize: "蒸发",

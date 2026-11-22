@@ -82,6 +82,7 @@ const EMPTY_PLAYER_DATA: PbPlayerState = {
   activeCharacterId: 0,
   dice: [],
   pileCard: [],
+  discardCard: [],
   handCard: [],
   character: [],
   combatStatus: [],
@@ -97,6 +98,8 @@ export const EMPTY_GAME_STATE: PbGameState = {
   currentTurn: 0,
   phase: PbPhaseType.INIT_HANDS,
   roundNumber: 0,
+  activeRule: [],
+  chaosEnabled: false,
   player: [EMPTY_PLAYER_DATA, EMPTY_PLAYER_DATA],
 };
 

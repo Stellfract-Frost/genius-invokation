@@ -273,6 +273,21 @@ export function getShowingCardPos(
   return [x, y];
 }
 
+/** 弃牌堆位置：与牌库左右对称，放在同一侧的另一端 */
+export function getDiscardPos([height, width]: Size, opp: boolean): Pos {
+  const [, y] = getPilePos([height, width], opp);
+  const x = (width - MINIMUM_WIDTH) / 2 + MINIMUM_WIDTH - 24;
+  return [x, y];
+}
+
+export function getDiscardHintPos(size: Size, opp: boolean) {
+  const [x, y] = getDiscardPos(size, opp);
+  return {
+    x: x - 4.5,
+    y: y - CARD_WIDTH / 2 - 4.5,
+  };
+}
+
 export function getPileHintPos(size: Size, opp: boolean) {
   const [x, y] = getPilePos(size, opp);
   return {

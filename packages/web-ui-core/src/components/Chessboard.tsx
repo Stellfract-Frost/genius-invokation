@@ -40,6 +40,7 @@ import {
   Match,
   on,
   onCleanup,
+  For,
   onMount,
   Show,
   splitProps,
@@ -62,6 +63,8 @@ import {
   getHandHintPos,
   getOppHandCardFocusedPos,
   getPileHintPos,
+  getDiscardHintPos,
+  getDiscardPos,
   getPilePos,
   getShowingCardPos,
   getTuningAreaPos,
@@ -100,6 +103,7 @@ import { PlayingCard } from "./PlayingCard";
 import { createCardDataViewer } from "@gi-tcg/card-data-viewer";
 import { useUiContext } from "../hooks/context";
 import { CardCountHint } from "./CardCountHint";
+import { Image } from "./Image";
 import { Key } from "@solid-primitives/keyed";
 import {
   DeclareEndMarker,
@@ -149,7 +153,13 @@ import { MiniSpecialViewGroup } from "./MiniSpecialView";
 import type { OppInfo } from "../opp";
 import { RichText } from "./RichText";
 
-export type CardArea = "myPile" | "oppPile" | "myHand" | "oppHand";
+export type CardArea =
+  | "myPile"
+  | "oppPile"
+  | "myHand"
+  | "oppHand"
+  | "myDiscard"
+  | "oppDiscard";
 
 export interface CardInfo {
   id: number;
@@ -382,6 +392,35 @@ function calcCardsInfo(
           },
         },
         enableShadow: i === pileSize - 1,
+        enableTransition: true,
+        playStep: null,
+        tuneStep: null,
+      });
+    }
+
+    // Discard pile
+    const discardSize = player.discardCard.length;
+    for (let i = 0; i < discardSize; i++) {
+      const [x, y] = getDiscardPos(size, opp);
+      const card = player.discardCard[i];
+      cards.push({
+        id: card.id,
+        data: card,
+        kind: opp ? "oppDiscard" : "myDiscard",
+        uiState: {
+          type: "cardStatic",
+          isAnimating: false,
+          triggered: triggeringEntities.includes(card.id),
+          draggingEndAnimation: false,
+          transform: {
+            x,
+            y,
+            z: (discardSize - 1 - i) * 0.1,
+            ry: 0,
+            rz: 90,
+          },
+        },
+        enableShadow: i === discardSize - 1,
         enableTransition: true,
         playStep: null,
         tuneStep: null,
@@ -678,6 +717,15 @@ function rerenderChildren(opt: {
       transform: {
         ...getPileHintPos(size, opp),
         z: player.pileCard.length * 0.1,
+        ...COUNT_HINT_TRANSFORM_BASE,
+      },
+    });
+    cardCountHints.push({
+      area: opp ? "oppDiscard" : "myDiscard",
+      value: player.discardCard.length,
+      transform: {
+        ...getDiscardHintPos(size, opp),
+        z: player.discardCard.length * 0.1,
         ...COUNT_HINT_TRANSFORM_BASE,
       },
     });
@@ -1074,6 +1122,8 @@ export function Chessboard(props: ChessboardProps) {
   const [selectingItem, setSelectingItem] = createSignal<SelectingItem | null>(
     null,
   );
+  /** 正在查看哪一方的弃牌堆（null 表示未打开） */
+  const [discardViewer, setDiscardViewer] = createSignal<0 | 1 | null>(null);
   /** 是否是主棋盘上被选中的卡 */
   const isSelectingItem = (id: number) => {
     const item = selectingItem();
@@ -1315,6 +1365,8 @@ export function Chessboard(props: ChessboardProps) {
     oppPile: null,
     myHand: null,
     oppHand: null,
+    myDiscard: null,
+    oppDiscard: null,
   });
 
   const showCardHint = (area: CardArea) => {
@@ -1510,6 +1562,10 @@ export function Chessboard(props: ChessboardProps) {
     currentTarget: HTMLElement,
     cardInfo: CardInfo,
   ) => {
+    if (cardInfo.kind === "myDiscard" || cardInfo.kind === "oppDiscard") {
+      setDiscardViewer(cardInfo.kind === "myDiscard" ? 0 : 1);
+      return;
+    }
     if (cardInfo.kind === "switching") {
       setSwitchedCards((c) => {
         const index = c.indexOf(cardInfo.id);
@@ -2155,6 +2211,65 @@ export function Chessboard(props: ChessboardProps) {
           >
             <CardDataViewer />
           </div>
+          <Show when={discardViewer() !== null}>
+            <div
+              class="absolute inset-0 z-100 flex items-center justify-center bg-black/60 p-4"
+              onClick={() => setDiscardViewer(null)}
+            >
+              <div
+                class="max-h-[80%] w-[min(92%,880px)] overflow-auto rounded-xl bg-white p-4 shadow-xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div class="mb-3 flex items-center justify-between">
+                  <h3 class="text-lg font-bold">
+                    {t("discardPile")}（
+                    {localProps.data.state.player[discardViewer()!].discardCard
+                      .length}
+                    ）
+                  </h3>
+                  <button
+                    class="btn btn-sm btn-outline-primary"
+                    onClick={() => setDiscardViewer(null)}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <Show
+                  when={
+                    localProps.data.state.player[discardViewer()!].discardCard
+                      .length > 0
+                  }
+                  fallback={
+                    <p class="py-8 text-center text-sm text-gray-500">
+                      {t("discardPileEmpty")}
+                    </p>
+                  }
+                >
+                  <div class="grid grid-cols-4 gap-2 sm:grid-cols-6">
+                    <For
+                      each={
+                        localProps.data.state.player[discardViewer()!]
+                          .discardCard
+                      }
+                    >
+                      {(card) => (
+                        <div
+                          class="overflow-hidden rounded border border-gray-300"
+                          title={assetsManager().getNameSync(card.definitionId)}
+                        >
+                          <Image
+                            imageId={card.definitionId}
+                            type="cardFace"
+                            class="w-full"
+                          />
+                        </div>
+                      )}
+                    </For>
+                  </div>
+                </Show>
+              </div>
+            </div>
+          </Show>
           {/* 右上角部件 */}
           <div class="justify-self-end h-8 m-2 flex flex-row-reverse gap-1.5 items-center">
             <Show when={localProps.data.state.phase !== PbPhaseType.GAME_END}>

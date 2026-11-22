@@ -34,6 +34,8 @@ export const HINT_STYLE_MAP: Record<
   oppHand: { component: CardCountHintBlue, rotate: 180 },
   myPile: { component: CardCountHintYellow, rotate: 90 },
   oppPile: { component: CardCountHintBlue, rotate: 90 },
+  myDiscard: { component: CardCountHintYellow, rotate: 90 },
+  oppDiscard: { component: CardCountHintBlue, rotate: 90 },
 };
 
 export function CardCountHint(props: CardCountHintProps) {
