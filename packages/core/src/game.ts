@@ -565,11 +565,25 @@ export class Game {
     this.setRuleRuntime({ ...runtime, playedCards });
   }
 
+  /**
+   * 是否是衍生牌：由效果生成（generated 标记），
+   * 或定义根本不在初始牌库中的牌（兜底，防止标记在其它路径丢失）。
+   */
+  private ruleIsDerivedCard(who: 0 | 1, card: EntityState) {
+    return (
+      card.generated === true ||
+      !this.state.players[who].initialPile.includes(card.definition)
+    );
+  }
+
   /** 特殊规则「运转」：把未打出的手牌移入弃牌堆（秘传牌留在手上） */
   private ruleMoveHandsToDiscard(who: 0 | 1) {
     for (const card of [...this.state.players[who].hands]) {
       // 秘传牌与衍生牌保留在手上
-      if (card.definition.tags.includes("legend") || card.generated) {
+      if (
+        card.definition.tags.includes("legend") ||
+        this.ruleIsDerivedCard(who, card)
+      ) {
         continue;
       }
       this.mutate({
@@ -602,7 +616,10 @@ export class Game {
       return;
     }
     // 秘传牌、衍生牌打出后直接消失
-    if (card.definition.tags.includes("legend") || card.generated) {
+    if (
+      card.definition.tags.includes("legend") ||
+      this.ruleIsDerivedCard(who, card)
+    ) {
       return;
     }
     const removed = this.state.players[who].removedEntities.find(
@@ -625,42 +642,6 @@ export class Game {
       ...(toBottom ? { targetIndex: 0 } : {}),
       value: { ...removed, id: 0, variables },
     });
-  }
-
-  /** 特殊规则「运转」：牌库不足时把弃牌堆洗回牌库（普通牌随机、禁忌知识均匀） */
-  private ruleRefillPileFromDiscard(who: 0 | 1) {
-    const player = this.state.players[who];
-    if (player.pile.length > 0) {
-      return;
-    }
-    const cards = [...player.discard];
-    if (cards.length === 0) {
-      return;
-    }
-    const forbiddenId = RULE_RELATED_DEFINITION_IDS.forbiddenKnowledge;
-    for (const card of cards) {
-      this.mutate({
-        type: "removeEntity",
-        from: { who, type: "discard", cardId: card.id },
-        oldState: card,
-        reason: "reshuffle",
-      });
-    }
-    const payloads = cards.map((card) => ({
-      type: "createEntity" as const,
-      target: { who, type: "pile" as const, cardId: 0 },
-      value: { ...card, id: 0 },
-    }));
-    this.mutator.insertPileCards(
-      payloads.filter((p) => p.value.definition.id !== forbiddenId),
-      "random",
-      who,
-    );
-    this.mutator.insertPileCards(
-      payloads.filter((p) => p.value.definition.id === forbiddenId),
-      "spaceAround",
-      who,
-    );
   }
 
   /** 特殊规则「疲劳」：记录某一方本回合用过的技能（同一技能只记一次） */
@@ -1366,19 +1347,12 @@ export class Game {
         await this.handleEvents(events);
         continue;
       }
-      // 逐张抽，牌库一空就先把弃牌堆洗回来，保证不会出现"牌库空着还能抽到"
-      let remaining = CIRCULATION_DRAW_COUNT;
-      while (remaining > 0) {
-        if (this.state.players[who].pile.length === 0) {
-          this.ruleRefillPileFromDiscard(who);
-          if (this.state.players[who].pile.length === 0) {
-            break;
-          }
-        }
-        const { events } = this.mutator.drawCardsPlain(who, 1);
-        await this.handleEvents(events);
-        remaining--;
-      }
+      // 洗回逻辑已在 drawCardsPlain 内部逐张处理，这里直接抽即可
+      const { events } = this.mutator.drawCardsPlain(
+        who,
+        CIRCULATION_DRAW_COUNT,
+      );
+      await this.handleEvents(events);
     }
     await this.handleEvent("onRoundEnd", new EventArg(this.state));
     for (const who of [0, 1] as const) {

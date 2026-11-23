@@ -46,7 +46,7 @@ import {
   type CreateEntityOptions,
   type InsertEntityOptions,
 } from "./utils";
-import { hasRule } from "./room_rules";
+import { hasRule, RULE_RELATED_DEFINITION_IDS } from "./room_rules";
 import {
   GiTcgCoreInternalError,
   GiTcgDataError,
@@ -975,8 +975,6 @@ export class StateMutator {
     const state: EntityState = {
       ...payload.value,
       [StateSymbol]: "entity",
-      // 新建（而非移动）的牌是衍生牌
-      ...(payload.type === "createEntity" ? { generated: true } : {}),
     };
     let overflowed = false;
     if (
@@ -1012,6 +1010,13 @@ export class StateMutator {
     const cards: EntityState[] = [];
     const events = new EventList();
     for (let i = 0; i < count; i++) {
+      // 「运转」：牌库空了先把弃牌堆洗回来，优先级高于抽牌本身
+      if (
+        this.state.config.roomRules?.includes("circulation") &&
+        this.state.players[who].pile.length === 0
+      ) {
+        this.reshuffleDiscardIntoPile(who);
+      }
       const card = this.state.players[who].pile[0];
       if (!card) {
         break;
@@ -1058,6 +1063,8 @@ export class StateMutator {
         ),
       ),
       attachments: [],
+      // 由效果创建的手牌是衍生牌
+      generated: true,
     };
     const events = this.insertHandCard(
       {
@@ -1071,6 +1078,39 @@ export class StateMutator {
       state: cardState,
       events,
     };
+  }
+
+  /** 「运转」：把弃牌堆洗回牌库（普通牌随机、禁忌知识均匀） */
+  reshuffleDiscardIntoPile(who: 0 | 1) {
+    const player = this.state.players[who];
+    const cards = [...player.discard];
+    if (cards.length === 0) {
+      return;
+    }
+    const forbiddenId = RULE_RELATED_DEFINITION_IDS.forbiddenKnowledge;
+    for (const card of cards) {
+      this.mutate({
+        type: "removeEntity",
+        from: { who, type: "discard", cardId: card.id },
+        oldState: card,
+        reason: "reshuffle",
+      });
+    }
+    const payloads = cards.map((card) => ({
+      type: "createEntity" as const,
+      target: { who, type: "pile" as const, cardId: 0 },
+      value: { ...card, id: 0 },
+    }));
+    this.insertPileCards(
+      payloads.filter((p) => p.value.definition.id !== forbiddenId),
+      "random",
+      who,
+    );
+    this.insertPileCards(
+      payloads.filter((p) => p.value.definition.id === forbiddenId),
+      "spaceAround",
+      who,
+    );
   }
 
   insertPileCards(

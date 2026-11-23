@@ -348,6 +348,7 @@ interface CardInfoCalcContext {
    * 控制oppHands朝向以及是否可以交互。
    */
   hasOppChessboard: boolean;
+  spectatorMode: boolean;
 }
 
 function calcCardsInfo(
@@ -398,8 +399,8 @@ function calcCardsInfo(
       });
     }
 
-    // Discard pile：只渲染我方，与牌库同样式（牌背朝外）
-    if (!opp) {
+    // Discard pile：对局中只渲染自己那一侧；观战视角显示双方
+    if (!opp || ctx.spectatorMode) {
       const discardSize = player.discardCard.length;
       for (let i = 0; i < discardSize; i++) {
         const [x, y] = getDiscardPos(size, opp);
@@ -407,7 +408,7 @@ function calcCardsInfo(
         cards.push({
           id: card.id,
           data: card,
-          kind: "myDiscard",
+          kind: opp ? "oppDiscard" : "myDiscard",
           uiState: {
             type: "cardStatic",
             isAnimating: false,
@@ -686,6 +687,7 @@ function rerenderChildren(opt: {
   previewData: ParsedPreviewData;
   availableSteps: ActionStep[];
   hasOppChessboard: boolean;
+  spectatorMode?: boolean;
 }): ChessboardChildren {
   const {
     size,
@@ -722,9 +724,9 @@ function rerenderChildren(opt: {
         ...COUNT_HINT_TRANSFORM_BASE,
       },
     });
-    if (!opp) {
+    if (!opp || opt.spectatorMode) {
       cardCountHints.push({
-        area: "myDiscard",
+        area: opp ? "oppDiscard" : "myDiscard",
         value: player.discardCard.length,
         transform: {
           ...getDiscardHintPos(size, opp),
@@ -747,6 +749,7 @@ function rerenderChildren(opt: {
   const animationPromises: Promise<void>[] = [];
   const currentCards = calcCardsInfo(state, {
     who: opt.who,
+    spectatorMode: opt.spectatorMode ?? false,
     size,
     myHandState,
     oppHandState,
@@ -760,6 +763,7 @@ function rerenderChildren(opt: {
   if (animatingCards.length > 0) {
     const previousCards = calcCardsInfo(previousState, {
       who: opt.who,
+      spectatorMode: opt.spectatorMode ?? false,
       size,
       myHandState,
       oppHandState,
@@ -1268,6 +1272,7 @@ export function Chessboard(props: ChessboardProps) {
           previewData: localProps.actionState?.previewData ?? NO_PREVIEW,
           availableSteps: localProps.actionState?.availableSteps ?? [],
           hasOppChessboard: !!localProps.opp,
+          spectatorMode: localProps.spectatorMode ?? false,
         });
         setChildren(newChildren);
         triggerUpdateChildren({ force: true });
