@@ -503,3 +503,34 @@ test("circulation: 没有该规则时手牌不会在回合结束被弃置", asyn
   expect(c.state.players[0].hands.length).toBe(1);
   expect(c.state.players[0].discard.length).toBe(0);
 });
+
+test("circulation: 衍生牌使用后不进入弃牌堆", async () => {
+  const target = ref();
+  const c = setup(
+    <State config={{ roomRules: ["circulation"] }}>
+      <Character my active def={Venti} v={{ health: 5 }} ref={target} />
+      <Character opp active />
+      <Card my def={MondstadtHashBrown} notInitial />
+    </State>,
+  );
+  await c.me.card(MondstadtHashBrown, target);
+  expect(c.state.players[0].discard.length).toBe(0);
+});
+
+test("circulation: 抽牌途中牌库抽空会立刻用弃牌堆补齐", async () => {
+  const c = setup(
+    <State config={{ roomRules: ["circulation"] }}>
+      <Character my active def={Venti} />
+      <Character opp active />
+      <Card my def={MondstadtHashBrown} />
+      <Card my def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+    </State>,
+  );
+  await c.me.end();
+  await c.opp.end();
+  // 2 张手牌进弃牌堆、牌库仅 1 张：先抽掉牌库那张，再用弃牌堆补 2 张，共抽 3 张
+  expect(c.state.players[0].hands.length).toBe(3);
+  expect(c.state.players[0].pile.length).toBe(0);
+  expect(c.state.players[0].discard.length).toBe(0);
+});

@@ -398,35 +398,6 @@ function calcCardsInfo(
       });
     }
 
-    // Discard pile
-    const discardSize = player.discardCard.length;
-    for (let i = 0; i < discardSize; i++) {
-      const [x, y] = getDiscardPos(size, opp);
-      const card = player.discardCard[i];
-      cards.push({
-        id: card.id,
-        data: card,
-        kind: opp ? "oppDiscard" : "myDiscard",
-        uiState: {
-          type: "cardStatic",
-          isAnimating: false,
-          triggered: triggeringEntities.includes(card.id),
-          draggingEndAnimation: false,
-          transform: {
-            x,
-            y,
-            z: (discardSize - 1 - i) * 0.1,
-            ry: 0,
-            rz: 90,
-          },
-        },
-        enableShadow: i === discardSize - 1,
-        enableTransition: true,
-        playStep: null,
-        tuneStep: null,
-      });
-    }
-
     // Hand
     const handCard = player.handCard.toSorted(
       (a, b) => a.definitionId - b.definitionId,
@@ -717,15 +688,6 @@ function rerenderChildren(opt: {
       transform: {
         ...getPileHintPos(size, opp),
         z: player.pileCard.length * 0.1,
-        ...COUNT_HINT_TRANSFORM_BASE,
-      },
-    });
-    cardCountHints.push({
-      area: opp ? "oppDiscard" : "myDiscard",
-      value: player.discardCard.length,
-      transform: {
-        ...getDiscardHintPos(size, opp),
-        z: player.discardCard.length * 0.1,
         ...COUNT_HINT_TRANSFORM_BASE,
       },
     });
@@ -1124,6 +1086,11 @@ export function Chessboard(props: ChessboardProps) {
   );
   /** 正在查看哪一方的弃牌堆（null 表示未打开） */
   const [discardViewer, setDiscardViewer] = createSignal<0 | 1 | null>(null);
+  /** 我方弃牌堆张数（对方弃牌堆不展示） */
+  const discardCount = () =>
+    localProps.data.state.player[localProps.who]?.discardCard.length ?? 0;
+  const hasCirculation = () =>
+    localProps.data.state.activeRule?.includes("circulation") ?? false;
   /** 是否是主棋盘上被选中的卡 */
   const isSelectingItem = (id: number) => {
     const item = selectingItem();
@@ -2048,6 +2015,18 @@ export function Chessboard(props: ChessboardProps) {
               onStateChange={setDicePanelState}
               spectatorMode={localProps.spectatorMode}
             />
+            <Show when={discardCount() > 0 || hasCirculation()}>
+              <button
+                class="place-self-end mb-16 mr-5 z-3 relative h-8 w-14 overflow-hidden rounded-lg border-2 border-slate-500 bg-slate-700 shadow-md hover:brightness-110"
+                title={t("discardPile")}
+                onClick={() => setDiscardViewer(localProps.who)}
+              >
+                <span class="absolute inset-0 flex items-center justify-center gap-0.5 text-xs font-bold text-white">
+                  <i class="i-mdi-cards-outline" />
+                  {discardCount()}
+                </span>
+              </button>
+            </Show>
             <SkillButtonGroup
               class="place-self-end mb-2 mr-6 z-2"
               skills={mySkills()}

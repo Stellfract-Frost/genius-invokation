@@ -585,16 +585,26 @@ export class Game {
     }
   }
 
-  /** 特殊规则「运转」：打出/调和的牌进入弃牌堆；秘传牌打出即消失 */
+  /**
+   * 特殊规则「运转」：打出/调和的牌进入弃牌堆。
+   *
+   * 秘传牌打出即消失；衍生牌（不在初始牌库中的牌）同样用完即消失。
+   * `toBottom` 为真时插到弃牌堆底部（调和用）。
+   */
   private ruleRecyclePlayedCard(
     who: 0 | 1,
     card: EntityState,
     keepVariables: boolean,
+    toBottom = false,
   ) {
     if (!hasRule(this.state, "circulation")) {
       return;
     }
     if (card.definition.tags.includes("legend")) {
+      return;
+    }
+    // 衍生牌不进入弃牌堆
+    if (!this.state.players[who].initialPile.includes(card.definition)) {
       return;
     }
     const removed = this.state.players[who].removedEntities.find(
@@ -614,6 +624,7 @@ export class Game {
     this.mutate({
       type: "createEntity",
       target: { who, type: "discard", cardId: 0 },
+      ...(toBottom ? { targetIndex: 0 } : {}),
       value: { ...removed, id: 0, variables },
     });
   }
@@ -621,7 +632,7 @@ export class Game {
   /** 特殊规则「运转」：牌库不足时把弃牌堆洗回牌库（普通牌随机、禁忌知识均匀） */
   private ruleRefillPileFromDiscard(who: 0 | 1) {
     const player = this.state.players[who];
-    if (player.pile.length >= CIRCULATION_DRAW_COUNT) {
+    if (player.pile.length > 0) {
       return;
     }
     const cards = [...player.discard];
@@ -1277,7 +1288,7 @@ export class Game {
                 reason: "elementalTuning",
               });
               // 特殊规则「运转」：调和掉的牌同样进入弃牌堆（保留其上的效果）
-              this.ruleRecyclePlayedCard(who, actionInfo.card, true);
+              this.ruleRecyclePlayedCard(who, actionInfo.card, true, true);
               const targetDice = actionInfo.result;
               this.mutate({
                 type: "resetDice",
@@ -1352,14 +1363,24 @@ export class Game {
       }
     }
     for (const who of [this.state.currentTurn, flip(this.state.currentTurn)]) {
-      if (circulation) {
-        this.ruleRefillPileFromDiscard(who);
+      if (!circulation) {
+        const { events } = this.mutator.drawCardsPlain(who, 2);
+        await this.handleEvents(events);
+        continue;
       }
-      const { events } = this.mutator.drawCardsPlain(
-        who,
-        circulation ? CIRCULATION_DRAW_COUNT : 2,
-      );
-      await this.handleEvents(events);
+      // 逐张抽，牌库一空就先把弃牌堆洗回来，保证不会出现"牌库空着还能抽到"
+      let remaining = CIRCULATION_DRAW_COUNT;
+      while (remaining > 0) {
+        if (this.state.players[who].pile.length === 0) {
+          this.ruleRefillPileFromDiscard(who);
+          if (this.state.players[who].pile.length === 0) {
+            break;
+          }
+        }
+        const { events } = this.mutator.drawCardsPlain(who, 1);
+        await this.handleEvents(events);
+        remaining--;
+      }
     }
     await this.handleEvent("onRoundEnd", new EventArg(this.state));
     for (const who of [0, 1] as const) {
