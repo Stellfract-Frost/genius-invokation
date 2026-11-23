@@ -316,7 +316,9 @@ export function exposeMutation(
       };
     }
     case "createEntity": {
-      const hidden = m.target.who !== who && m.target.type === "hands";
+      const hidden =
+        m.target.who !== who &&
+        (m.target.type === "hands" || m.target.type === "discard");
       return {
         $case: "createEntity",
         who: m.target.who,
@@ -341,7 +343,10 @@ export function exposeMutation(
 
       // 对手塞入牌库/手牌的信息不可见
       const hidden =
-        m.from.who !== who && ["hands", "pile"].includes(m.target.type);
+        m.from.who !== who &&
+        (["hands", "pile"].includes(m.target.type) ||
+          m.target.type === "discard" ||
+          m.from.type === "discard");
       const REASON_MAP: Record<MoveEntityM["reason"], PbMoveEntityReason> = {
         draw: PbMoveEntityReason.DRAW,
         undraw: PbMoveEntityReason.UNDRAW,
@@ -376,8 +381,11 @@ export function exposeMutation(
       }
       const hidden =
         m.from.who !== who &&
-        ["hands", "pile"].includes(m.from.type) &&
-        ["overflow", "elementalTuning"].includes(m.reason);
+        (["hands", "pile", "discard"].includes(m.from.type)
+          ? ["overflow", "elementalTuning", "ruleDiscard", "reshuffle"].includes(
+              m.reason,
+            ) || m.from.type === "discard"
+          : false);
       const REASON_MAP: Record<RemoveEntityM["reason"], PbRemoveEntityReason> =
         {
           discarded: PbRemoveEntityReason.DISCARDED,
@@ -688,8 +696,8 @@ export function exposeState(who: 0 | 1, state: GameState): PbGameState {
       return {
         activeCharacterId: p.activeCharacterId,
         pileCard: p.pile.map((c) => exposeEntity(state, c, true)),
-        // 弃牌堆是公开信息，双方都能看到牌面
-        discardCard: p.discard.map((c) => exposeEntity(state, c, false)),
+        // 弃牌堆只对本人可见，对手只看到牌背
+        discardCard: p.discard.map((c) => exposeEntity(state, c, i !== who)),
         handCard: p.hands.map((c) => exposeEntity(state, c, i !== who)),
         character: p.characters.map((ch) => exposeCharacter(state, p, ch)),
         dice,

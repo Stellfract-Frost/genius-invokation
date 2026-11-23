@@ -1795,8 +1795,11 @@ export class SkillContext<Meta extends ContextMetaBase> {
       );
       return;
     }
-    // 只有角色技能生成的牌算衍生牌；手牌、场地生成的走普通牌待遇
-    const markGenerated = this.self.definition.type === "character";
+    // 只有「角色侧」生成的牌算衍生牌：
+    // 角色本体、角色身上的状态/装备都落在 characters 区域；
+    // 手牌（hands）、场地/召唤物（supports/summons）生成的不算
+    const callerArea = this._getEntityArea(this.self.id);
+    const markGenerated = callerArea.type === "characters";
     const { state } = this.callAndEmit("createHandCard", who, cardDef, {
       markGenerated,
     });

@@ -82,7 +82,7 @@ const state = InternalGame.createInitialState({
 | core state | `PlayerState.discard: EntityState[]` |
 | 区域类型 | `EntityArea` 的 `type` 增加 `"discard"` |
 | proto | `PlayerState.discard_card = 10` |
-| 状态暴露 | `exposeState` 输出 `discardCard`（弃牌堆公开，双方可见） |
+| 状态暴露 | `exposeState` 输出 `discardCard`；**牌面只对本人可见**，对手仅见牌背与数量 |
 | 移除实体 | `utils.ts` 的 `removeEntity` 区域遍历列表必须加 `"discard"` |
 | 查询类型 | `RegularTypeAreaTypeMap` 要允许 `"discard"`，否则 query 体系类型全崩 |
 
@@ -122,8 +122,11 @@ private ruleIsDerivedCard(_who, card) {
 }
 ```
 
-- **只有「角色技能生成」的牌才算衍生牌**。`mutator.createHandCard` 通过 `opt.markGenerated` 决定是否打标记，
-  `skill_context.createHandCard` 按调用者类型传入：`this.self.definition.type === "character"`。
+- **只有「角色侧生成」的牌才算衍生牌**。`mutator.createHandCard` 通过 `opt.markGenerated` 决定是否打标记，
+  `skill_context.createHandCard` 按**调用者所在区域**判定：`this._getEntityArea(this.self.id).type === "characters"`。
+  这样角色本体、角色身上的状态/装备触发的被动生成（如法尔伽普攻两次后的牌）都能覆盖，
+  而 `definition.type === "character"` 的写法会漏掉状态触发的场景。
+  数据层现有 66+ 处 `:createHandCard`，角色目录与卡牌目录各占一半，必须靠区域区分。
 - 手牌生成、场地生成、规则塞入牌库的牌（如禁忌知识）**都不算**，按普通牌待遇（打出进弃牌堆、回合结束照常弃置）。
 - 标记写在 `mutator.createHandCard` 构造 `cardState` 时（**不要**写在 `insertHandCard`，见 7.1）。
 - 曾经用「定义不在初始牌库」作兜底，导致禁忌知识被误判为衍生牌、回合结束留在手上。已移除，不要加回来。
@@ -167,7 +170,8 @@ if (rules.includes("circulation") && pile.length === 0) {
 - **按钮在页面层**（`Room.tsx`），`fixed right-0 top-1/2 -translate-y-1/2`，不受棋盘旋转与裁切影响。
 - 牌背样式用 CSS 渐变模拟（页面层拿不到 assets 管理器，无法用真实卡背图）。
 - 点击通过跨层信号 `setDiscardPileRequest(who)` 通知棋盘，由 `Chessboard` 打开牌面列表弹窗。
-- 只显示自己那一侧；`spectatorMode` 下显示双方。
+- 只显示自己那一侧；`spectatorMode` 下显示双方（对手的只有牌背与数量）。
+- 相关的 `createEntity` / `moveEntity` / `removeEntity` 在涉及 `discard` 时对对手隐藏，避免弃置动画暴露牌面。
 
 **注意**：不要把弃牌堆放在棋盘 3D 容器里用 `absolute` 定位。移动端棋盘旋转 90° 且 `overflow-clip`，按钮会被裁到视口外。
 
