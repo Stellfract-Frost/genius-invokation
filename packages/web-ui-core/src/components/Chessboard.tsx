@@ -399,37 +399,6 @@ function calcCardsInfo(
       });
     }
 
-    // Discard pile：对局中只渲染自己那一侧；观战视角显示双方
-    if (!opp || ctx.spectatorMode) {
-      const discardSize = player.discardCard.length;
-      for (let i = 0; i < discardSize; i++) {
-        const [x, y] = getDiscardPos(size, opp);
-        const card = player.discardCard[i];
-        cards.push({
-          id: card.id,
-          data: card,
-          kind: opp ? "oppDiscard" : "myDiscard",
-          uiState: {
-            type: "cardStatic",
-            isAnimating: false,
-            triggered: triggeringEntities.includes(card.id),
-            draggingEndAnimation: false,
-            transform: {
-              x,
-              y,
-              z: (discardSize - 1 - i) * 0.1,
-              ry: 180,
-              rz: 90,
-            },
-          },
-          enableShadow: i === discardSize - 1,
-          enableTransition: true,
-          playStep: null,
-          tuneStep: null,
-        });
-      }
-    }
-
     // Hand
     const handCard = player.handCard.toSorted(
       (a, b) => a.definitionId - b.definitionId,
@@ -2225,6 +2194,18 @@ export function Chessboard(props: ChessboardProps) {
           >
             <CardDataViewer />
           </div>
+          <Show when={discardCount() > 0 || hasCirculation()}>
+            <button
+              class="absolute right-1 top-[52%] z-3 flex h-14 w-9 flex-col items-center justify-center overflow-hidden rounded-md border-2 border-amber-200/70 bg-gradient-to-br from-indigo-600 to-violet-800 shadow-lg hover:brightness-110"
+              title={t("discardPile")}
+              onClick={() => setDiscardViewer(localProps.who)}
+            >
+              <i class="i-mdi-cards-outline text-white/80 text-sm" />
+              <span class="text-[11px] font-bold leading-none text-white">
+                {discardCount()}
+              </span>
+            </button>
+          </Show>
           <Show when={discardViewer() !== null}>
             <div
               class="absolute inset-0 z-100 flex items-center justify-center bg-black/60 p-4"
