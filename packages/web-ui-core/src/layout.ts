@@ -273,11 +273,14 @@ export function getShowingCardPos(
   return [x, y];
 }
 
-/** 弃牌堆位置：与牌库左右对称，放在同一侧的另一端 */
+/**
+ * 弃牌堆位置：紧贴我方牌库、沿同一条轴向外平移。
+ *
+ * 不做跨中线的镜像——旋转视图下镜像会跑到对手半场、和对方的牌库重叠。
+ */
 export function getDiscardPos([height, width]: Size, opp: boolean): Pos {
-  const [, y] = getPilePos([height, width], opp);
-  const x = (width - MINIMUM_WIDTH) / 2 + MINIMUM_WIDTH - 24;
-  return [x, y];
+  const [x, y] = getPilePos([height, width], opp);
+  return [x + CARD_WIDTH * 1.3, y];
 }
 
 export function getDiscardHintPos(size: Size, opp: boolean) {
