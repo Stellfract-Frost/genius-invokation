@@ -104,6 +104,7 @@ import { createCardDataViewer } from "@gi-tcg/card-data-viewer";
 import { useUiContext } from "../hooks/context";
 import { CardCountHint } from "./CardCountHint";
 import { Image } from "./Image";
+import { discardPileRequest, setDiscardPileRequest } from "../discard_pile";
 import { Key } from "@solid-primitives/keyed";
 import {
   DeclareEndMarker,
@@ -1101,6 +1102,14 @@ export function Chessboard(props: ChessboardProps) {
   );
   /** 正在查看哪一方的弃牌堆（null 表示未打开） */
   const [discardViewer, setDiscardViewer] = createSignal<0 | 1 | null>(null);
+  // 页面层的弃牌堆按钮（不参与旋转）请求打开列表
+  createEffect(() => {
+    const request = discardPileRequest();
+    if (request !== null) {
+      setDiscardViewer(request);
+      setDiscardPileRequest(null);
+    }
+  });
   /** 我方弃牌堆张数（对方弃牌堆不展示） */
   const discardCount = () =>
     localProps.data.state.player[localProps.who]?.discardCard.length ?? 0;
@@ -2194,18 +2203,7 @@ export function Chessboard(props: ChessboardProps) {
           >
             <CardDataViewer />
           </div>
-          <Show when={discardCount() > 0 || hasCirculation()}>
-            <button
-              class="absolute right-1 top-[52%] z-3 flex h-14 w-9 flex-col items-center justify-center overflow-hidden rounded-md border-2 border-amber-200/70 bg-gradient-to-br from-indigo-600 to-violet-800 shadow-lg hover:brightness-110"
-              title={t("discardPile")}
-              onClick={() => setDiscardViewer(localProps.who)}
-            >
-              <i class="i-mdi-cards-outline text-white/80 text-sm" />
-              <span class="text-[11px] font-bold leading-none text-white">
-                {discardCount()}
-              </span>
-            </button>
-          </Show>
+
           <Show when={discardViewer() !== null}>
             <div
               class="absolute inset-0 z-100 flex items-center justify-center bg-black/60 p-4"

@@ -40,3 +40,4 @@ export {
   AutoResizeText,
   type AutoResizeTextProps,
 } from "./components/AutoResizeText.tsx"
+export { discardPileRequest, setDiscardPileRequest } from "./discard_pile.ts";

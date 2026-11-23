@@ -44,7 +44,12 @@ import {
   RpcRequest,
   RpcResponse,
 } from "@gi-tcg/typings";
-import { Client, createClient, WebUiPlayerIO } from "@gi-tcg/web-ui-core";
+import {
+  Client,
+  createClient,
+  setDiscardPileRequest,
+  WebUiPlayerIO,
+} from "@gi-tcg/web-ui-core";
 import { useMobile } from "../App";
 import { Dynamic } from "solid-js/web";
 import { MobileChessboardLayout } from "../layouts/MobileChessboardLayout";
@@ -233,6 +238,7 @@ export default function Room() {
   };
 
   const initializeClient = async (payload: InitializedPayload) => {
+    setMyWho(payload.who);
     const profile = await fetchProfile(payload.profile);
     const onGiveUp = async () => {
       try {
@@ -322,10 +328,17 @@ export default function Room() {
     ruleNoticeTimer = window.setTimeout(() => setRuleNotice(null), 6000);
   };
   onCleanup(() => window.clearTimeout(ruleNoticeTimer));
+  const [latestState, setLatestState] = createSignal<any>(null);
+  const [myWho, setMyWho] = createSignal<0 | 1>(0);
+  const discardCount = () =>
+    latestState()?.player?.[myWho()]?.discardCard?.length ?? 0;
+  const circulationEnabled = () =>
+    latestState()?.activeRule?.includes("circulation") ?? false;
   const applyRuleState = (state: any) => {
     if (!state) {
       return;
     }
+    setLatestState(state);
     const rules: string[] = state.activeRule ?? [];
     const chaos: boolean = state.chaosEnabled ?? false;
     setActiveRules(rules);
@@ -528,6 +541,18 @@ export default function Room() {
         class="p-0 data-[mobile]:h-100dvh data-[mobile]:overflow-clip container mx-auto flex flex-col group max-w-[calc((100dvh-13.5rem)*160/81)]"
         bool:data-mobile={mobile() && chessboard()}
       >
+        <Show when={discardCount() > 0 || circulationEnabled()}>
+          <button
+            class="fixed right-0 top-1/2 -translate-y-1/2 z-150 h-16 w-11 rounded-l-lg border-2 border-r-0 border-amber-200/70 bg-[radial-gradient(circle_at_35%_25%,#6366f1,#1e1b4b_70%)] shadow-[0_4px_12px_rgba(0,0,0,0.45)] flex flex-col items-center justify-center gap-0.5"
+            title={t("discardPile")}
+            onClick={() => setDiscardPileRequest(myWho())}
+          >
+            <i class="i-mdi-cards-outline text-white/70 text-base" />
+            <span class="text-[11px] font-bold text-white leading-none">
+              {discardCount()}
+            </span>
+          </button>
+        </Show>
         <Show when={ruleNotice()}>
           {(notice) => (
             <div class="fixed top-16 left-1/2 -translate-x-1/2 z-200 w-[min(92vw,28rem)] pointer-events-none">

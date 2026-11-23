@@ -182,6 +182,7 @@ export default {
   rule_forbiddenKnowledge_name: "禁忌",
   rule_forbiddenKnowledge_desc:
     "对局开始时，双方牌库中随机塞入 6 张「禁忌知识」。",
+  discardPile: "弃牌堆",
   roundRulesTitle: "第 {{round}} 回合 · 特殊规则",
   roundRulesBadge: "本回合规则",
   roundRulesNone: "本回合没有生效的特殊规则。",
