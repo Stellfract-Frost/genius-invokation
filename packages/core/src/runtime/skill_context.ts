@@ -1795,7 +1795,11 @@ export class SkillContext<Meta extends ContextMetaBase> {
       );
       return;
     }
-    const { state } = this.callAndEmit("createHandCard", who, cardDef);
+    // 只有角色技能生成的牌算衍生牌；手牌、场地生成的走普通牌待遇
+    const markGenerated = this.self.definition.type === "character";
+    const { state } = this.callAndEmit("createHandCard", who, cardDef, {
+      markGenerated,
+    });
     return this.get(state);
   }
 

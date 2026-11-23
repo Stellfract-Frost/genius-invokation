@@ -215,6 +215,8 @@ export type InsertPilePayload =
 export interface InsertHandCardOption {
   /** 不执行爆牌逻辑；用于直接打出的场景（冒险/汤/烟谜主） */
   noOverflow?: boolean;
+  /** 标记为「角色生成」的衍生牌（不进弃牌堆、回合结束留在手上） */
+  markGenerated?: boolean;
 }
 
 export interface CreateHandCardResult {
@@ -1063,8 +1065,8 @@ export class StateMutator {
         ),
       ),
       attachments: [],
-      // 由效果创建的手牌是衍生牌
-      generated: true,
+      // 仅「角色技能生成」的手牌才是衍生牌（手牌/场地生成的不算）
+      ...(opt.markGenerated ? { generated: true } : {}),
     };
     const events = this.insertHandCard(
       {

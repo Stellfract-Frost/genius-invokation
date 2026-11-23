@@ -566,14 +566,11 @@ export class Game {
   }
 
   /**
-   * 是否是衍生牌：由效果生成（generated 标记），
-   * 或定义根本不在初始牌库中的牌（兜底，防止标记在其它路径丢失）。
+   * 是否是衍生牌：仅限「角色技能生成」的牌（createHandCard 时打了标记）。
+   * 手牌、场地生成的不算；规则塞入牌库的牌（如禁忌知识）也不算。
    */
-  private ruleIsDerivedCard(who: 0 | 1, card: EntityState) {
-    return (
-      card.generated === true ||
-      !this.state.players[who].initialPile.includes(card.definition)
-    );
+  private ruleIsDerivedCard(_who: 0 | 1, card: EntityState) {
+    return card.generated === true;
   }
 
   /** 特殊规则「运转」：把未打出的手牌移入弃牌堆（秘传牌留在手上） */

@@ -117,14 +117,16 @@ onEndPhase（月感电等「回合结束」效果）
 ### 4.4 衍生牌判定
 
 ```ts
-private ruleIsDerivedCard(who, card) {
-  return card.generated === true
-      || !this.state.players[who].initialPile.includes(card.definition);
+private ruleIsDerivedCard(_who, card) {
+  return card.generated === true;
 }
 ```
 
-- `generated` 在 `mutator.createHandCard` 构造 `cardState` 时写入（**不要**写在 `insertHandCard`，见 7.1）。
-- 兜底条件覆盖标记在其它路径丢失的情况（如角色技能生成的「诸武相授」）。
+- **只有「角色技能生成」的牌才算衍生牌**。`mutator.createHandCard` 通过 `opt.markGenerated` 决定是否打标记，
+  `skill_context.createHandCard` 按调用者类型传入：`this.self.definition.type === "character"`。
+- 手牌生成、场地生成、规则塞入牌库的牌（如禁忌知识）**都不算**，按普通牌待遇（打出进弃牌堆、回合结束照常弃置）。
+- 标记写在 `mutator.createHandCard` 构造 `cardState` 时（**不要**写在 `insertHandCard`，见 7.1）。
+- 曾经用「定义不在初始牌库」作兜底，导致禁忌知识被误判为衍生牌、回合结束留在手上。已移除，不要加回来。
 
 ### 4.5 洗回
 

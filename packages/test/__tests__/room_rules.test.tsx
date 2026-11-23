@@ -549,3 +549,16 @@ test("circulation: 抽牌途中牌库抽空会立刻用弃牌堆补齐", async (
   expect(c.state.players[0].pile.length).toBe(0);
   expect(c.state.players[0].discard.length).toBe(0);
 });
+
+test("circulation: 非角色生成的牌不算衍生牌，打出后进入弃牌堆", async () => {
+  const target = ref();
+  const c = setup(
+    <State config={{ roomRules: ["circulation"] }}>
+      <Character my active def={Venti} v={{ health: 5 }} ref={target} />
+      <Character opp active />
+      <Card my def={MondstadtHashBrown} notInitial />
+    </State>,
+  );
+  await c.me.card(MondstadtHashBrown, target);
+  expect(c.state.players[0].discard.length).toBe(1);
+});
