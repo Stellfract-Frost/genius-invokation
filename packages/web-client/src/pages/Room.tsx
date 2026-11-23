@@ -538,12 +538,12 @@ export default function Room() {
       component={mobile() && !!chessboard() ? MobileChessboardLayout : Layout}
     >
       <div
-        class="p-0 data-[mobile]:h-100dvh data-[mobile]:overflow-clip container mx-auto flex flex-col group max-w-[calc((100dvh-13.5rem)*160/81)]"
+        class="relative p-0 data-[mobile]:h-100dvh data-[mobile]:overflow-clip container mx-auto flex flex-col group max-w-[calc((100dvh-13.5rem)*160/81)]"
         bool:data-mobile={mobile() && chessboard()}
       >
         <Show when={discardCount() > 0 || circulationEnabled()}>
           <button
-            class="fixed right-0 top-1/2 -translate-y-1/2 z-150 h-16 w-11 rounded-l-lg border-2 border-r-0 border-amber-200/70 bg-[radial-gradient(circle_at_35%_25%,#6366f1,#1e1b4b_70%)] shadow-[0_4px_12px_rgba(0,0,0,0.45)] flex flex-col items-center justify-center gap-0.5"
+            class="absolute right-0 top-1/2 -translate-y-1/2 z-150 h-16 w-11 rounded-l-lg border-2 border-r-0 border-amber-200/70 bg-[radial-gradient(circle_at_35%_25%,#6366f1,#1e1b4b_70%)] shadow-[0_4px_12px_rgba(0,0,0,0.45)] flex flex-col items-center justify-center gap-0.5"
             title={t("discardPile")}
             onClick={() => setDiscardPileRequest(myWho())}
           >
