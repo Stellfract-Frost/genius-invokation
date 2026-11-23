@@ -510,11 +510,26 @@ test("circulation: 衍生牌使用后不进入弃牌堆", async () => {
     <State config={{ roomRules: ["circulation"] }}>
       <Character my active def={Venti} v={{ health: 5 }} ref={target} />
       <Character opp active />
-      <Card my def={MondstadtHashBrown} notInitial />
+      <Card my def={MondstadtHashBrown} generated />
     </State>,
   );
   await c.me.card(MondstadtHashBrown, target);
   expect(c.state.players[0].discard.length).toBe(0);
+});
+
+test("circulation: 衍生牌在回合结束时保留在手上", async () => {
+  const c = setup(
+    <State config={{ roomRules: ["circulation"] }}>
+      <Character my active def={Venti} />
+      <Character opp active />
+      <Card my def={MondstadtHashBrown} generated />
+      <Card my def={MondstadtHashBrown} />
+    </State>,
+  );
+  await c.me.end();
+  await c.opp.end();
+  const hands = c.state.players[0].hands;
+  expect(hands.some((card) => card.generated)).toBe(true);
 });
 
 test("circulation: 抽牌途中牌库抽空会立刻用弃牌堆补齐", async () => {

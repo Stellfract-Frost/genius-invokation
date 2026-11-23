@@ -975,6 +975,8 @@ export class StateMutator {
     const state: EntityState = {
       ...payload.value,
       [StateSymbol]: "entity",
+      // 新建（而非移动）的牌是衍生牌
+      ...(payload.type === "createEntity" ? { generated: true } : {}),
     };
     let overflowed = false;
     if (

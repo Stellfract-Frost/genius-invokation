@@ -151,6 +151,8 @@ export namespace Card {
     notInitial?: boolean;
     /** 覆盖变量初值（例如特殊规则的 ruleCost） */
     v?: Record<string, number>;
+    /** 标记为由效果生成的衍生牌 */
+    generated?: boolean;
     children?: JSX.Element[] | JSX.Element;
   }
 }
@@ -395,8 +397,16 @@ export function setup(state: JSX.Element): TestController {
         break;
       }
       case Card: {
-        const { ref, def, pile, notInitial, children, v, ...namedV } =
-          prop as OmitProp<Card.Prop>;
+        const {
+          ref,
+          def,
+          pile,
+          notInitial,
+          generated,
+          children,
+          v,
+          ...namedV
+        } = prop as OmitProp<Card.Prop>;
         const id = ref?.id ?? nextId();
         if (!def) {
           throw new Error(
@@ -452,6 +462,7 @@ export function setup(state: JSX.Element): TestController {
             ...namedV,
           },
           attachments: attachments as AttachmentState[],
+          ...(generated ? { generated: true } : {}),
         };
         const area = pile ? "pile" : "hands";
         player[area].push(state as Draft<EntityState>);

@@ -245,6 +245,11 @@ export interface EntityState<Ty extends EntityType = EntityType> {
   readonly definition: EntityDefinition<Ty>;
   readonly variables: Variables;
   readonly attachments: AttachmentState[];
+  /**
+   * 由角色技能 / 卡牌效果「生成」出来的牌（衍生牌）。
+   * 这类牌不进入弃牌堆，且在回合结束时保留在手上。
+   */
+  readonly generated?: boolean;
 }
 
 export interface AttachmentState {

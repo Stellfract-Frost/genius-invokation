@@ -568,7 +568,8 @@ export class Game {
   /** 特殊规则「运转」：把未打出的手牌移入弃牌堆（秘传牌留在手上） */
   private ruleMoveHandsToDiscard(who: 0 | 1) {
     for (const card of [...this.state.players[who].hands]) {
-      if (card.definition.tags.includes("legend")) {
+      // 秘传牌与衍生牌保留在手上
+      if (card.definition.tags.includes("legend") || card.generated) {
         continue;
       }
       this.mutate({
@@ -600,11 +601,8 @@ export class Game {
     if (!hasRule(this.state, "circulation")) {
       return;
     }
-    if (card.definition.tags.includes("legend")) {
-      return;
-    }
-    // 衍生牌不进入弃牌堆
-    if (!this.state.players[who].initialPile.includes(card.definition)) {
+    // 秘传牌、衍生牌打出后直接消失
+    if (card.definition.tags.includes("legend") || card.generated) {
       return;
     }
     const removed = this.state.players[who].removedEntities.find(
