@@ -25,6 +25,7 @@ export default {
   includeUnreleasedData: "Includes unreleased data",
   license: "License",
   roomProfile: "Rules profile",
+  roomProfileFromDeck: "Tournament ({{versions}})",
   gameVersion: "Game version",
   latestBeta: "Latest beta",
   simulatorVersion: "Simulator version",

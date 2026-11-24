@@ -39,6 +39,7 @@ import {
   type RpcResponse,
   serializeGameStateLog,
   CORE_VERSION,
+  VERSIONS,
   type GameState,
   setAsyncContext,
   isRoomRuleId,
@@ -812,7 +813,14 @@ export class RoomsService {
           ? 0
           : 1;
 
-    const compiledProfile = profilesService.get(params.profileId);
+    const hostVersions = VERSIONS.filter((version) =>
+      playerInfo.deck.versions?.includes(version),
+    );
+    // Saved deck versions define the combined rules for both players.
+    const compiledProfile =
+      hostVersions.length > 1
+        ? profilesService.createMerged(hostVersions)
+        : profilesService.get(params.profileId);
     const roomRules = (params.roomRules ?? []).filter(isRoomRuleId);
     const roomConfig: CreateRoomConfig = {
       hostWho,

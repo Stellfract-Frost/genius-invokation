@@ -23,6 +23,7 @@ export default {
   includeUnreleasedData: "包含未发布数据",
   license: "许可",
   roomProfile: "规则配置",
+  roomProfileFromDeck: "比赛版本（{{versions}}）",
   gameVersion: "游戏版本",
   latestBeta: "最新测试版",
   simulatorVersion: "模拟器版本",

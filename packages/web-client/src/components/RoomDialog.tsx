@@ -16,6 +16,7 @@
 import {
   createSignal,
   createResource,
+  createMemo,
   Show,
   For,
   createEffect,
@@ -24,6 +25,7 @@ import {
   splitProps,
 } from "solid-js";
 import { makePersisted } from "@solid-primitives/storage";
+import { VERSIONS } from "@gi-tcg/core";
 import axios, { AxiosError } from "axios";
 import { ToggleSwitch } from "./ToggleSwitch";
 import { DeckInfoProps } from "./DeckBriefInfo";
@@ -206,6 +208,14 @@ export function RoomDialog(props: RoomDialogProps) {
   const [availableDecks, setAvailableDecks] = createSignal<DeckInfoProps[]>([]);
   const [loadingDecks, setLoadingDecks] = createSignal(true);
   const [selectedDeck, setSelectedDeck] = createSignal<number | null>(null);
+  const selectedDeckInfo = createMemo(() =>
+    availableDecks().find((deck) => deck.id === selectedDeck()),
+  );
+  const deckVersions = createMemo(() => {
+    const versions = selectedDeckInfo()?.versions;
+    return VERSIONS.filter((version) => versions?.includes(version));
+  });
+  const usesDeckVersions = () => editable() && deckVersions().length > 1;
   const [entering, setEntering] = createSignal(false);
   const [roomRules, setRoomRules] = createSignal<string[]>(
     props.joiningRoomInfo?.config?.roomRules ?? [],
@@ -313,15 +323,27 @@ export function RoomDialog(props: RoomDialogProps) {
   });
 
   const enterRoom = async () => {
+    const deck = selectedDeckInfo();
+    const currentProfile = profile();
+    if (!deck || !currentProfile) {
+      return;
+    }
     setEntering(true);
     const { type, name, id } = status();
+    const guestDeck = {
+      characters: deck.characters,
+      cards: deck.cards,
+      versions: deck.versions ?? undefined,
+    };
     try {
       let roomId = props.joiningRoomInfo?.id;
       let playerId = id ?? null;
       let response;
       if (typeof roomId === "undefined") {
-        const profileId = profile()!.id;
-        setSavedProfile(profileId);
+        const profileId = usesDeckVersions() ? undefined : currentProfile.id;
+        if (profileId) {
+          setSavedProfile(profileId);
+        }
         const payload: any = {
           profileId,
           ...timeConfig(),
@@ -332,12 +354,10 @@ export function RoomDialog(props: RoomDialogProps) {
         };
         if (type === "guest") {
           payload.name = name;
-          payload.deck = guestDecks().find(
-            (deck) => deck.id === selectedDeck(),
-          );
+          payload.deck = guestDeck;
           payload.avatarUrl = guestInfo()?.avatarUrl;
         } else if (type === "user") {
-          payload.hostDeckId = selectedDeck();
+          payload.hostDeckId = deck.id;
         }
         const { data } = await axios.post("rooms", payload);
         response = data;
@@ -346,13 +366,13 @@ export function RoomDialog(props: RoomDialogProps) {
         let payload;
         if (type === "guest") {
           payload = {
-            deck: guestDecks().find((deck) => deck.id === selectedDeck()),
+            deck: guestDeck,
             name,
             avatarUrl: guestInfo()?.avatarUrl,
           };
         } else if (type === "user") {
           payload = {
-            deckId: selectedDeck(),
+            deckId: deck.id,
           };
         }
         const { data } = await axios.post(`rooms/${roomId}/players`, payload);
@@ -391,34 +411,35 @@ export function RoomDialog(props: RoomDialogProps) {
           <div class="flex flex-col w-full md:w-130" data-editable={editable()}>
             <div class="mb-3 flex flex-row gap-4 items-center">
               <h4 class="text-lg">{t("roomProfile")}</h4>
-              <select
-                class="disabled:pointer-events-none appearance-none"
-                value={profile()?.id}
-                onChange={(e) => setProfileById(e.target.value)}
-                disabled={!editable()}
+              <Show
+                when={usesDeckVersions()}
+                fallback={
+                  <select
+                    class="disabled:pointer-events-none appearance-none"
+                    value={profile()?.id}
+                    onChange={(e) => setProfileById(e.target.value)}
+                    disabled={!editable()}
+                  >
+                    <For
+                      each={
+                        props.joiningRoomInfo
+                          ? [props.joiningRoomInfo.config.profile]
+                          : (profiles()?.profiles ?? [])
+                      }
+                    >
+                      {(profile) => (
+                        <option value={profile.id}>{profile.name}</option>
+                      )}
+                    </For>
+                  </select>
+                }
               >
-                <For
-                  each={
-                    props.joiningRoomInfo
-                      ? [props.joiningRoomInfo.config.profile]
-                      : (profiles()?.profiles ?? [])
-                  }
-                >
-                  {(profile) => (
-                    <option value={profile.id}>{profile.name}</option>
-                  )}
-                </For>
-                <Show
-                  when={
-                    profile() &&
-                    !(profiles()?.profiles ?? []).some(
-                      (p) => p.id === profile()!.id,
-                    )
-                  }
-                >
-                  <option value={profile()!.id}>{profile()!.name}</option>
-                </Show>
-              </select>
+                <span class="min-w-0 break-words">
+                  {t("roomProfileFromDeck", {
+                    versions: deckVersions().join(" / "),
+                  })}
+                </span>
+              </Show>
             </div>
             <h4 class="text-lg mb-3">{t("thinkingTime")}</h4>
             <div class="w-full grid grid-cols-[repeat(auto-fill,minmax(100px,1fr))] md:grid-cols-3 gap-2 mb-3 data-[disabled=true]:pointer-events-none">
