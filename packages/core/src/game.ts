@@ -631,9 +631,11 @@ export class Game {
     if (!removed) {
       return;
     }
-    // 幻戏这类「离手即回炉」的牌：不论打出还是调和，进弃牌堆的都是原版定义，
-    // 变量也一并归位，避免低费档循环、也避免弃置减费残留
-    const baseId = PLAYED_TO_BASE_ID[card.definition.id];
+    // 幻戏这类「打出即回炉」的牌：打出后进弃牌堆的是原版定义，变量一并归位。
+    // 调和不对口——调和按当时档位原样进堆（keepVariables 为真时跳过回炉）。
+    const baseId = keepVariables
+      ? undefined
+      : PLAYED_TO_BASE_ID[card.definition.id];
     const definition =
       baseId !== undefined
         ? (this.state.data.entities.get(baseId) ?? card.definition)
