@@ -694,18 +694,7 @@ function rerenderChildren(opt: {
         ...COUNT_HINT_TRANSFORM_BASE,
       },
     });
-    if (!opp || opt.spectatorMode) {
-      cardCountHints.push({
-        area: opp ? "oppDiscard" : "myDiscard",
-        value: player.discardCard.length,
-        transform: {
-          ...getDiscardHintPos(size, opp),
-          z: player.discardCard.length * 0.1,
-          ...COUNT_HINT_TRANSFORM_BASE,
-        },
-      });
-    }
-    cardCountHints.push({
+cardCountHints.push({
       area: opp ? "oppHand" : "myHand",
       value: player.handCard.length,
       transform: {
@@ -1112,7 +1101,7 @@ export function Chessboard(props: ChessboardProps) {
   });
   /** 我方弃牌堆张数（对方弃牌堆不展示） */
   const discardCount = () =>
-    localProps.data.state.player[localProps.who]?.discardCard.length ?? 0;
+    (localProps.data.state.player[localProps.who]?.discardCard ?? []).length;
   const hasCirculation = () =>
     localProps.data.state.activeRule?.includes("circulation") ?? false;
   /** 是否是主棋盘上被选中的卡 */
@@ -2216,7 +2205,7 @@ export function Chessboard(props: ChessboardProps) {
                 <div class="mb-3 flex items-center justify-between">
                   <h3 class="text-lg font-bold">
                     {t("discardPile")}（
-                    {localProps.data.state.player[discardViewer()!].discardCard
+                    {(localProps.data.state.player[discardViewer()!]?.discardCard ?? [])
                       .length}
                     ）
                   </h3>
@@ -2229,8 +2218,8 @@ export function Chessboard(props: ChessboardProps) {
                 </div>
                 <Show
                   when={
-                    localProps.data.state.player[discardViewer()!].discardCard
-                      .length > 0
+                    (localProps.data.state.player[discardViewer()!]?.discardCard ??
+                      []).length > 0
                   }
                   fallback={
                     <p class="py-8 text-center text-sm text-gray-500">
@@ -2242,7 +2231,7 @@ export function Chessboard(props: ChessboardProps) {
                     <For
                       each={
                         localProps.data.state.player[discardViewer()!]
-                          .discardCard
+                          ?.discardCard ?? []
                       }
                     >
                       {(card) => (
