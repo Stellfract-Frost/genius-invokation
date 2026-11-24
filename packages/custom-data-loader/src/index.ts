@@ -180,11 +180,11 @@ export class CustomDataLoader {
     return this;
   }
 
-  done(): [GameData, Partial<AssetsManagerOption>] {
+  done(version = this.version): [GameData, Partial<AssetsManagerOption>] {
     const officialVersionResolver =
-      typeof this.version === "function"
-        ? this.version
-        : createOfficialVersionResolver(this.version);
+      typeof version === "function"
+        ? version
+        : createOfficialVersionResolver(version);
     const gameData = this.registry.resolve((items) => {
       const customDataItems = items.filter(
         (item) => item.version.from === "customData",

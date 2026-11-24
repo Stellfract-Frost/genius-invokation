@@ -125,17 +125,31 @@ export default function EditDeck() {
     }
     setPreviewSingle(null);
     setPreviewState("loading");
+    const request = new AbortController();
     const timer = setTimeout(async () => {
       try {
-        const { data } = await axios.post<ProfileSummary>("profiles/merge", { versions: vs });
+        const { data } = await axios.post<ProfileSummary>(
+          "profiles/merge",
+          { versions: vs },
+          { signal: request.signal },
+        );
+        const detail = await fetchProfile(data);
+        if (request.signal.aborted) {
+          return;
+        }
         setPreviewProfile(data);
-        setPreviewDetail(await fetchProfile(data));
+        setPreviewDetail(detail);
         setPreviewState("ready");
       } catch {
-        setPreviewState("error");
+        if (!request.signal.aborted) {
+          setPreviewState("error");
+        }
       }
     }, 400);
-    onCleanup(() => clearTimeout(timer));
+    onCleanup(() => {
+      clearTimeout(timer);
+      request.abort();
+    });
   });
 
   createEffect(() => {

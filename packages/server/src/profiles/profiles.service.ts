@@ -13,12 +13,13 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import console from "node:console";
+import { createHash } from "node:crypto";
 import { CURRENT_VERSION, VERSIONS } from "@gi-tcg/core";
 import type { Version } from "@gi-tcg/core";
 import { customProfile, loadPresets, officialProfile } from "./compiler";
-import type { CompiledProfile } from "./types";
+import type { CompiledPreset, CompiledProfile } from "./types";
 import {
-  CARD_PIN,
   CHAR_BODY,
   CHAR_OVERRIDE,
   ENTITY_PREFERENCE,
@@ -55,6 +56,7 @@ function skillAt(id: number, idx: number): [string, number] | null {
 export class ProfilesService {
   readonly defaultProfileId = `official/${CURRENT_VERSION}`;
   private profiles = new Map<string, CompiledProfile>();
+  private practiceCardSource?: CompiledPreset;
 
   async onModuleInit() {
     for (const version of VERSIONS) {
@@ -66,6 +68,9 @@ export class ProfilesService {
       { recursive: true },
     )) {
       this.profiles.set(compiled.profile.id, compiled);
+      if (compiled.profile.id === "piovium/lianyu-live") {
+        this.practiceCardSource = compiled;
+      }
     }
   }
 
@@ -96,7 +101,7 @@ export class ProfilesService {
           })
         : avail;
     const pool = candidates.length > 0 ? candidates : avail;
-    let bestIdx = pool.includes(baseIdx) ? baseIdx : pool[pool.length - 1];
+    let bestIdx = pool.includes(baseIdx) ? baseIdx : pool[pool.length - 1]!;
     for (const i of pool) {
       const s = bodyAt(id, i)!;
       const b = bodyAt(id, bestIdx)!;
@@ -131,8 +136,7 @@ export class ProfilesService {
       const bestIdx = this.bodyChoice(id, poolIdx, baseIdx);
       if (bestIdx === null) continue;
       bodyBest.set(id, bestIdx);
-      // 显式钉住本体：行动牌的恋雨杯版本可能沿依赖把技能/本体拉旧，
-      // 角色本体必须保留在本池选出的版本。
+      // 显式钉住本体，以免相关技能的版本沿依赖覆盖本体。
       map[id] = VERSION_LIST[bestIdx] as Version;
     }
 
@@ -175,7 +179,7 @@ export class ProfilesService {
         })();
         bestIdx = candidates.includes(baseIdx)
           ? baseIdx
-          : candidates[candidates.length - 1];
+          : candidates[candidates.length - 1]!;
         let bestScore = skillAt(id, bestIdx)![1];
         for (const i of candidates) {
           const s = skillAt(id, i)!;
@@ -185,8 +189,7 @@ export class ProfilesService {
           }
         }
       }
-      // 所有可用技能都显式钉到本池选出的版本，防止行动牌的旧版依赖
-      // 把角色技能一起拉旧。
+      // 显式固定已选技能，防止依赖传播覆盖选版结果。
       map[id] = VERSION_LIST[bestIdx] as Version;
       if (bestIdx !== baseIdx) {
         pinnedSkills.push(id);
@@ -201,11 +204,6 @@ export class ProfilesService {
       if (idx !== undefined) {
         map[Number(idStr)] = VERSION_LIST[idx] as Version;
       }
-    }
-
-    // ④ 行动牌：完全采用恋雨杯的指定版本，不受抽选版本限制
-    for (const [idStr, pinIdx] of Object.entries(CARD_PIN)) {
-      map[Number(idStr)] = VERSION_LIST[pinIdx] as Version;
     }
 
     // ④ 防止依赖传播把本体版本拉低：
@@ -317,7 +315,7 @@ export class ProfilesService {
         const candidates = capped.length > 0 ? capped : avail;
         bestIdx = candidates.includes(baseIdx)
           ? baseIdx
-          : candidates[candidates.length - 1];
+          : candidates[candidates.length - 1]!;
         let bestScore = scoreOf(id, bestIdx);
         let bestHp = bodyAt(id, bestIdx)![0];
         for (const i of candidates) {
@@ -340,10 +338,6 @@ export class ProfilesService {
       if (pin === undefined || !poolIdx.includes(pin)) continue;
       if (pin !== baseIdx) map[id] = VERSION_LIST[pin] as Version;
     }
-    // 行动牌照样按恋雨杯钉（与角色判定/抽选版本无关）
-    for (const [idStr, pinIdx] of Object.entries(CARD_PIN)) {
-      map[Number(idStr)] = VERSION_LIST[pinIdx] as Version;
-    }
     return map;
   }
 
@@ -351,10 +345,10 @@ export class ProfilesService {
    * 练习用：把若干版本合成一个 profile（幂等，进程重启后失效）。
    * baseVersion 取池内最高版本；versionMap 默认按规则自动生成。
    */
-  async createMerged(
+  createMerged(
     versions: Version[],
     versionMap?: Record<number, Version>,
-  ): Promise<CompiledProfile> {
+  ): CompiledProfile {
     if (!Array.isArray(versions) || versions.length === 0) {
       throw new BadRequestException("versions must be a non-empty array");
     }
@@ -365,35 +359,34 @@ export class ProfilesService {
     const sorted = [...new Set(versions)].sort(
       (a, b) => VERSIONS.indexOf(a as never) - VERSIONS.indexOf(b as never),
     );
-    const baseVersion = sorted[sorted.length - 1];
+    const baseVersion = sorted[sorted.length - 1]!;
     const selectedMaxIdx = VERSION_LIST.indexOf(baseVersion as never);
-    // 角色只允许抽到的版本为止；行动牌不受版本限制，所以数据加载到当前版本，
-    // 再用 blacklist 挡住抽选最高版之后才登场的角色。
-    const dataVersion = CURRENT_VERSION;
+    // 角色只允许抽到的版本为止；行动牌沿用恋雨杯 Live 的牌池。
     const characterBlacklist = Object.keys(CHAR_BODY)
       .map(Number)
       .filter((id) => CHAR_BODY[id]![0]![0] > selectedMaxIdx);
     const name = "比赛版本";
     const overrides = this.fieldOverrides(sorted);
-    // 「多版本即比赛版本」：手牌（行动牌）的效果与描述一律按恋雨杯来，
-    // 因此把恋雨杯 preset 的 mod 与静态覆盖一起带进 practice 配置。
-    const lianyuPreset =
-      this.profiles.get("piovium/lianyu-s1") ??
-      this.profiles.get("piovium/lianyu-live");
-    const lianyuMods = lianyuPreset?.profile.mods ?? [];
-    const lianyuOverrides = lianyuPreset?.profile.assets.overrideData ?? [];
-    const build = async (vm: Record<number, Version>) => {
-      const pinTag = Object.keys(vm).length;
-      const id = `practice/${sorted.join("-")}${pinTag ? `#${pinTag}` : ""}`;
+    const cardDataFrom = this.practiceCardSource;
+    if (!cardDataFrom) {
+      throw new Error("Missing piovium/lianyu-live preset");
+    }
+    const build = (vm: Record<number, Version>) => {
+      const pinTag = createHash("sha256")
+        .update(JSON.stringify(vm))
+        .digest("hex")
+        .slice(0, 16);
+      const id = `practice/${sorted.join("-")}#${pinTag}`;
+      const cached = this.profiles.get(id);
+      if (cached) {
+        return cached;
+      }
       return customProfile(baseVersion, {
         id,
         name,
-        dataVersion,
         versionMap: vm,
         fieldOverrides: overrides,
-        mods: lianyuMods,
-        extraOverrides: lianyuOverrides,
-        cardDataFrom: lianyuPreset,
+        cardDataFrom,
         deck: {
           blacklist: characterBlacklist,
           allowNewerCards: true,
@@ -411,7 +404,7 @@ export class ProfilesService {
     let lastErr: unknown = null;
     for (const level of levels) {
       try {
-        compiled = await build(level.vm());
+        compiled = build(level.vm());
         if (level !== levels[0]) {
           console.warn(`[practice] ${sorted.join("+")} 降级为「${level.name}」`);
         }
@@ -426,10 +419,6 @@ export class ProfilesService {
     }
     if (!compiled) {
       throw lastErr instanceof Error ? lastErr : new Error("profile build failed");
-    }
-    const cached = this.profiles.get(compiled.profile.id);
-    if (cached) {
-      return cached;
     }
     this.profiles.set(compiled.profile.id, compiled);
     return compiled;

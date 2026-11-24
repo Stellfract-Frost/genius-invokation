@@ -9,14 +9,16 @@
 //  2. 传播时"先到先得"，冲突只记录不抛错（旧版本优先，符合"效果优先/预削弱"口径）；
 //  3. 未命中任何指定的实体回落到 baseVersion。
 import { VERSIONS } from "@gi-tcg/core";
-import type { DependencyInfo, Version } from "@gi-tcg/core";
+import type {
+  OfficialVersionResolver,
+  Version,
+  VersionInfo,
+} from "@gi-tcg/core";
+import type { AnalyzeResult } from "@gi-tcg/data-code-analyzer";
 
 interface VersionCandidate {
   readonly id: number;
-  readonly version: {
-    readonly from: string;
-    readonly value: { readonly predicate: "since" | "until"; readonly version: Version };
-  };
+  readonly version: VersionInfo;
 }
 
 const versionCompare = (a: Version, b: Version) =>
@@ -28,23 +30,25 @@ function pickOfficial<T extends VersionCandidate>(
 ): T | null {
   const since = candidates.find(
     (c) =>
-      c.version.from === "official" &&
-      c.version.value.predicate === "since",
+      c.version.from === "official" && c.version.value.predicate === "since",
   );
-  const until = candidates
-    .filter(
-      (c) =>
-        c.version.from === "official" &&
-        c.version.value.predicate === "until" &&
-        versionCompare(c.version.value.version, required) >= 0,
-    )
-    .sort((a, b) =>
-      versionCompare(a.version.value.version, b.version.value.version),
-    );
-  if (!since || versionCompare(since.version.value.version, required) > 0) {
+  if (
+    !since ||
+    since.version.from !== "official" ||
+    versionCompare(since.version.value.version, required) > 0
+  ) {
     return null;
   }
-  return until[0] ?? since;
+  const until = candidates.flatMap((candidate) => {
+    const { version } = candidate;
+    return version.from === "official" &&
+      version.value.predicate === "until" &&
+      versionCompare(version.value.version, required) >= 0
+      ? [{ candidate, version: version.value.version }]
+      : [];
+  });
+  until.sort((a, b) => versionCompare(a.version, b.version));
+  return until[0]?.candidate ?? since;
 }
 
 export interface PracticeResolverLog {
@@ -54,11 +58,8 @@ export interface PracticeResolverLog {
 export function createPracticeResolver(
   baseVersion: Version,
   versions: Record<number, Version>,
-  dependencies: readonly DependencyInfo[] = [],
-): ((candidates: readonly VersionCandidate[]) => VersionCandidate | null) & {
-  versionMap: Record<number, Version> & { $base: Version };
-  log: PracticeResolverLog;
-} {
+  dependencies: readonly Pick<AnalyzeResult, "id" | "dependencies">[] = [],
+): OfficialVersionResolver & { log: PracticeResolverLog } {
   const depMap = new Map(
     dependencies.map(({ id, dependencies }) => [id, dependencies] as const),
   );
@@ -99,6 +100,9 @@ export function createPracticeResolver(
 
   const resolve = <T extends VersionCandidate>(candidates: readonly T[]) => {
     const id = candidates[0]?.id;
+    if (id === undefined) {
+      return null;
+    }
     const required = versionMap[id] ?? baseVersion;
     const hit = pickOfficial(candidates, required);
     if (hit) return hit;
@@ -107,19 +111,12 @@ export function createPracticeResolver(
     const byBase = pickOfficial(candidates, baseVersion);
     if (byBase) return byBase;
     // 兜底 2：取最早的一个 since 定义，保证一定能解析出实体
-    const since = candidates
-      .filter((c) => c.version.from === "official" && c.version.value.predicate === "since")
-      .sort((a, b) => versionCompare(a.version.value.version, b.version.value.version));
-    return since[0] ?? candidates[0] ?? null;
+    const since = candidates.find(
+      (c) =>
+        c.version.from === "official" && c.version.value.predicate === "since",
+    );
+    return since ?? candidates[0] ?? null;
   };
 
-  const fn = (<T extends VersionCandidate>(candidates: readonly T[]) =>
-    resolve(candidates)) as unknown as {
-    <T extends VersionCandidate>(candidates: readonly T[]): T | null;
-    versionMap: typeof versionMap;
-    log: PracticeResolverLog;
-  };
-  fn.versionMap = versionMap;
-  fn.log = log;
-  return fn as never;
+  return Object.assign(resolve, { versionMap, log });
 }

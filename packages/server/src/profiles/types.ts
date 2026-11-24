@@ -16,6 +16,7 @@
 import type {
   GameConfig,
   GameData,
+  OfficialVersionResolver,
   Version,
   VersionBehavior,
 } from "@gi-tcg/core";
@@ -69,4 +70,8 @@ export interface CompiledProfile {
   profile: Profile;
   summary: ProfileSummary;
   data: GameData;
+}
+
+export interface CompiledPreset extends CompiledProfile {
+  resolveData: (resolver: OfficialVersionResolver) => GameData;
 }

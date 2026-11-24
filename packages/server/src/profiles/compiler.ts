@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import console from "node:console";
 import { createHash } from "node:crypto";
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -22,6 +23,7 @@ import {
   createOfficialVersionResolver,
   getVersionBehavior,
   mergeGameConfigWithDefault,
+  playSkillOfCard,
   type GameData,
   type Version,
 } from "@gi-tcg/core";
@@ -31,9 +33,10 @@ import { CustomDataLoader } from "@gi-tcg/custom-data-loader";
 import { DiceType } from "@gi-tcg/typings";
 import { PLAYCOST_OVERRIDE } from "./char-stats";
 import { createPracticeResolver } from "./practice-resolver";
-import type { OverrideData } from "@gi-tcg/assets-manager";
+import type { OverrideData, PlayCost } from "@gi-tcg/assets-manager";
 import type {
   CompiledProfile,
+  CompiledPreset,
   ModSource,
   Preset,
   Profile,
@@ -110,80 +113,82 @@ export function officialProfile(baseVersion: Version): CompiledProfile {
 /**
  * 练习用自定义 profile：指定基础版本 + 逐实体版本映射。
  * 用途：赛前练牌时"多选版本"，把若干版本合成一个卡池。
- * - baseVersion 取池内最高版本，天然禁止 sinceVersion 更高的角色/牌
- *   （verifyDeckForProfile 会校验牌组版本不得高于 baseVersion）
- * - versionMap 用于把个别实体钉到池内另一个版本（强度按抽到的版本取）
+ * baseVersion 决定对局规则，versionMap 决定角色及技能的选版。
+ * 行动牌使用赛事配置，角色池由 deck 黑名单限制。
  */
-export async function customProfile(
+export function customProfile(
   baseVersion: Version,
   options: {
     id: string;
     name: string;
-    /** 实际加载数据的版本；行动牌池可以高于规则 base。 */
-    dataVersion?: Version;
     versionMap?: Record<number, Version>;
     fieldOverrides?: Record<number, { hp?: number; maxEnergy?: number }>;
     deck?: ProfileDeckConfig;
-    /** 赛事 mod（GTS 源码）：改写个别牌的效果，如船坞长剑、便携动力锯 */
-    mods?: ModSource[];
-    /** 赛事静态数据覆盖：描述文本、费用等 */
-    extraOverrides?: OverrideData[];
     /**
      * 行动牌的数据来源（赛事配置的编译产物）。
      * 多版本即比赛版本：手牌一律用赛事那份数据，角色仍按所选版本。
      */
-    cardDataFrom?: CompiledProfile;
+    cardDataFrom: CompiledPreset;
   },
-): Promise<CompiledProfile> {
-  const versionMap = options.versionMap ?? {};
+): CompiledProfile {
+  const source = options.cardDataFrom;
+  const cardIds = new Set(
+    [...source.data.entities.values()]
+      .filter(playSkillOfCard)
+      .map(({ id }) => id),
+  );
+  const dependencies = new Map<number, Set<number>>();
+  for (const { id, dependencies: ids } of analyzeResult) {
+    const edges = dependencies.get(id) ?? new Set<number>();
+    ids.forEach((id) => edges.add(id));
+    dependencies.set(id, edges);
+  }
+  const characterIds = new Set(source.data.characters.keys());
+  for (const id of characterIds) {
+    for (const dependency of dependencies.get(id) ?? []) {
+      if (!cardIds.has(dependency)) {
+        characterIds.add(dependency);
+      }
+    }
+  }
+  // Shared dependencies follow the selected character skills. Card-only
+  // dependencies, such as generated cards and support counters, follow Live.
+  const cardDataIds = new Set(cardIds);
+  for (const id of cardDataIds) {
+    for (const dependency of dependencies.get(id) ?? []) {
+      if (!characterIds.has(dependency)) {
+        cardDataIds.add(dependency);
+      }
+    }
+  }
+  const versionMap = Object.fromEntries(
+    Object.entries(options.versionMap ?? {}).filter(
+      ([id]) => !cardDataIds.has(Number(id)),
+    ),
+  );
   const rulesVersion = baseVersion;
-  const dataVersion = options.dataVersion ?? rulesVersion;
-  // 必须走 resolver + CustomDataLoader，否则 versionMap 不会作用到实际数据上
-  // （与 compilePreset 保持同一条链路）
-  // 用自定义 resolver：允许"本体取新、技能取旧"的跨版本组合（官方实现会直接抛冲突）
-  const resolver = createPracticeResolver(dataVersion, versionMap, analyzeResult);
+  const dataVersion = source.profile.baseVersion;
+  // 多版本角色允许本体与技能选用不同的历史版本。
+  const resolver = createPracticeResolver(
+    dataVersion,
+    versionMap,
+    analyzeResult,
+  );
   if (resolver.log.conflicts.length > 0) {
     console.warn(
       `[practice] ${options.id} 依赖冲突 ${resolver.log.conflicts.length} 处（已按旧版本保留）`,
     );
   }
-  const loader = new CustomDataLoader();
-  loader.setVersion(resolver as never);
-  // 「多版本即比赛版本」：把恋雨杯的 mod 一起编译，效果与描述才与官方一致。
-  // 单个 mod 失败只跳过它，不连累整套版本映射。
-  for (const mod of options.mods ?? []) {
-    try {
-      await loader.loadMod(mod.content);
-    } catch (cause) {
-      console.warn(
-        `[practice] ${options.id} mod 加载失败（已跳过）：${(cause as Error).message}`,
-      );
-    }
-  }
-  let [
-    data,
-    { officialDeckCompatible, customData = [], overrideData = [] },
-  ] = loader.done();
-  if (!officialDeckCompatible && (options.mods ?? []).length > 0) {
-    // mod 让数据不再兼容官方卡组：丢弃 mod，退回无 mod 的编译结果，
-    // 保证多版本配置仍然可用（宁可不改效果，也不能让对局开不起来）
-    console.warn(
-      `[practice] ${options.id} 应用赛事 mod 后不再兼容官方卡组，已回退为无 mod 版本`,
-    );
-    const plainFormatter = new CustomDataLoader();
-    plainFormatter.setVersion(resolver as never);
-    [data, { customData, overrideData }] = plainFormatter.done();
-  }
+  const data = source.resolveData(resolver);
   // 集所长的字段级覆盖：本体取池内血量最高的版本，充能取池内最低值。
   // 注意：GameData 里的角色定义是全局共享的，直接改会污染其它 profile，
   // 因此这里做写时复制：只替换被覆盖的角色，并新建 Map。
   let patched = data;
   const ovEntries = Object.entries(options.fieldOverrides ?? {});
-  type RawPlayCost = { type: string; count: number }[];
   type RawSkill = {
     id: number;
     skillType: string | null;
-    playCost?: RawPlayCost;
+    playCost?: PlayCost[];
     initiativeSkillConfig?: {
       requiredCost: ReadonlyMap<DiceType, number>;
     };
@@ -197,14 +202,13 @@ export async function customProfile(
     [DiceType.Anemo]: "GCG_COST_DICE_ANEMO",
     [DiceType.Geo]: "GCG_COST_DICE_GEO",
     [DiceType.Dendro]: "GCG_COST_DICE_DENDRO",
-    [DiceType.Omni]: "GCG_COST_DICE_SAME",
-    [DiceType.Aligned]: "GCG_COST_DICE_ALIGNED",
+    [DiceType.Aligned]: "GCG_COST_DICE_SAME",
     [DiceType.Energy]: "GCG_COST_ENERGY",
     [DiceType.Legend]: "GCG_COST_LEGEND",
   };
   // 费用覆盖：除了固定规则（如魔偶剑鬼），充能被压低的角色，其爆发费用也要
   // 跟着降到同一个值，否则会出现「面板 2 充能、大招仍要 3 充能」。
-  const costOverrides: Record<number, RawPlayCost> = {
+  const costOverrides: Record<number, PlayCost[]> = {
     ...PLAYCOST_OVERRIDE,
   };
   const skillCostPatches = new Map<number, ReadonlyMap<DiceType, number>>();
@@ -241,7 +245,10 @@ export async function customProfile(
       if (!ch || !vc) continue;
       const nextVarConfigs = { ...vc };
       if (ov.maxEnergy != null && vc.maxEnergy) {
-        nextVarConfigs.maxEnergy = { ...vc.maxEnergy, initialValue: ov.maxEnergy };
+        nextVarConfigs.maxEnergy = {
+          ...vc.maxEnergy,
+          initialValue: ov.maxEnergy,
+        };
       }
       if (ov.hp != null && vc.maxHealth) {
         nextVarConfigs.maxHealth = { ...vc.maxHealth, initialValue: ov.hp };
@@ -279,24 +286,61 @@ export async function customProfile(
     }
     patched = { ...data, characters: chars } as typeof data;
   }
-  // 「多选版本 = 比赛版本」：行动牌（3 开头）的定义整体改用赛事配置的编译产物，
-  // 这样费用/描述/效果与官方赛事完全一致，不再依赖版本映射去猜。
-  let entities = patched.entities;
-  if (options.cardDataFrom) {
-    const merged = new Map(patched.entities);
-    let replaced = 0;
-    for (const [id, def] of options.cardDataFrom.data.entities) {
-      if (id >= 300000 && id < 400000) {
-        merged.set(id, def);
-        replaced += 1;
+  const finalData = {
+    ...patched,
+    entities: new Map(patched.entities),
+    extensions: new Map(patched.extensions),
+    attachments: new Map(patched.attachments),
+  };
+  const {
+    version: sourceVersion,
+    customData,
+    overrideData = [],
+  } = source.profile.assets;
+  const assetVersions: Record<number, string> & {
+    $base: string;
+    $category: string;
+  } = {
+    ...resolver.versionMap,
+    $category: dataVersion,
+  };
+  const officialCards = getData(dataVersion).entities;
+  const assetOverrides = new Map(overrideData.map((item) => [item.id, item]));
+  for (const id of cardDataIds) {
+    const entity = source.data.entities.get(id);
+    const extension = source.data.extensions.get(id);
+    const attachment = source.data.attachments.get(id);
+    if (entity) {
+      finalData.entities.set(id, entity);
+      const skill = playSkillOfCard(entity);
+      if (skill && entity !== officialCards.get(id)) {
+        // The deck editor reads the base category in bulk. Publish the same
+        // costs as the engine so those cards don't inherit the category cost.
+        const playCost: PlayCost[] = [
+          ...skill.initiativeSkillConfig.requiredCost,
+        ].map(([type, count]) => ({
+          type: diceCostType[type] ?? String(type),
+          count,
+        }));
+        assetOverrides.set(id, { ...assetOverrides.get(id), id, playCost });
       }
     }
-    console.warn(
-      `[practice] ${options.id} 行动牌改用赛事数据: ${replaced} 个定义`,
-    );
-    entities = merged;
+    if (extension) {
+      finalData.extensions.set(id, extension);
+    }
+    if (attachment) {
+      finalData.attachments.set(id, attachment);
+    }
+    const version =
+      typeof sourceVersion === "string"
+        ? sourceVersion
+        : (sourceVersion[id] ?? sourceVersion.$base);
+    if (version === dataVersion) {
+      delete assetVersions[id];
+    } else {
+      assetVersions[id] = version;
+    }
   }
-  const finalData = entities === patched.entities ? patched : { ...patched, entities };
 
   return finishProfile(
     {
@@ -305,18 +349,21 @@ export async function customProfile(
       baseVersion: rulesVersion,
       officialDeckCompatible: true,
       gameConfig: { ...DEFAULT_GAME_CONFIG },
-      versionBehavior: getVersionBehavior(rulesVersion),
+      versionBehavior: {
+        ...getVersionBehavior(rulesVersion),
+        discardMaxCostHandsAbortPreview:
+          source.profile.versionBehavior.discardMaxCostHandsAbortPreview,
+      },
       versionMap,
-      mods: options.mods ?? [],
+      mods: source.profile.mods,
       ...(options.deck ? { deck: options.deck } : {}),
       assets: {
         // 逐实体版本映射：前端据此按实体版本渲染角色/技能/卡牌，而不是只按 base 显示
-        version: { ...resolver.versionMap, $category: dataVersion },
+        version: assetVersions,
         customData,
         // 字段级覆盖（如集所长压低的充能）必须一起下发，否则前端仍按静态数据显示
         overrideData: [
-          ...overrideData,
-          ...(options.extraOverrides ?? []),
+          ...assetOverrides.values(),
           ...Object.entries(options.fieldOverrides ?? {}).map(([id, ov]) => ({
             id: Number(id),
             ...ov,
@@ -327,7 +374,7 @@ export async function customProfile(
             playCost,
           })),
         ],
-        officialDeckCompatible,
+        officialDeckCompatible: true,
       },
     },
     finalData,
@@ -337,7 +384,7 @@ export async function customProfile(
 export async function compilePreset(
   preset: Preset,
   source: URL,
-): Promise<CompiledProfile> {
+): Promise<CompiledPreset> {
   const baseVersion = preset.version ?? CURRENT_VERSION;
   const gameConfig = { ...DEFAULT_GAME_CONFIG, ...preset.config };
   const { base, ...behavior } = preset.version_behavior ?? {};
@@ -410,7 +457,7 @@ export async function compilePreset(
   for (const item of [...overrideData, ...explicitOverrides]) {
     merged.set(item.id, { ...merged.get(item.id), ...item });
   }
-  return finishProfile(
+  const compiled = finishProfile(
     {
       id: preset.id,
       name: preset.name ?? preset.id,
@@ -422,10 +469,7 @@ export async function compilePreset(
       versionMap,
       mods,
       assets: {
-        version: {
-          ...resolver.versionMap,
-          // No available $category here. Waiting future solution
-        },
+        version: resolver.versionMap,
         customData,
         overrideData: [...merged.values()],
         officialDeckCompatible,
@@ -433,6 +477,7 @@ export async function compilePreset(
     },
     data,
   );
+  return { ...compiled, resolveData: (resolver) => loader.done(resolver)[0] };
 }
 
 const presetExtensions = [
@@ -453,7 +498,7 @@ const presetExtensions = [
 /** Load the first supported preset in a directory, or null if none exists. */
 export async function loadPreset(
   directory: string | URL,
-): Promise<CompiledProfile | null> {
+): Promise<CompiledPreset | null> {
   const path = directory instanceof URL ? fileURLToPath(directory) : directory;
   for (const extension of presetExtensions) {
     const source = pathToFileURL(join(path, `preset.${extension}`));
@@ -476,9 +521,9 @@ export async function loadPreset(
 export async function loadPresets(
   directory: string | URL,
   { recursive = false } = {},
-): Promise<CompiledProfile[]> {
+): Promise<CompiledPreset[]> {
   const entries = await readdir(directory, { withFileTypes: true, recursive });
-  const profiles: CompiledProfile[] = [];
+  const profiles: CompiledPreset[] = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const profile = await loadPreset(join(entry.parentPath, entry.name));
