@@ -165,7 +165,28 @@ export function getEntityById(state: GameState, id: number): AnyState {
       }
     }
   }
-  throw new GiTcgCoreInternalError(`Cannot found entity ${id}`);
+  // 只在失败路径执行：把当前各区域的实体 id 打出来，
+  // 便于定位「找不到的这个 id 本应属于哪个区域」
+  const dump = (() => {
+    const ids = (arr: readonly { id: number }[]) => arr.map((e) => e.id);
+    return (state.players as readonly {
+      characters: readonly { id: number }[];
+      hands: readonly { id: number }[];
+      pile: readonly { id: number }[];
+      discard: readonly { id: number }[];
+      combatStatuses: readonly { id: number }[];
+      supports: readonly { id: number }[];
+      summons: readonly { id: number }[];
+    }[])
+      .map(
+        (p, i) =>
+          `P${i} chars=[${ids(p.characters)}] hands=[${ids(p.hands)}] pile=[${ids(p.pile)}] discard=[${ids(p.discard)}] status=[${ids(p.combatStatuses)}] support=[${ids(p.supports)}] summon=[${ids(p.summons)}]`,
+      )
+      .join(" | ");
+  })();
+  throw new GiTcgCoreInternalError(
+    `Cannot found entity ${id}\n${dump}`,
+  );
 }
 
 /**
