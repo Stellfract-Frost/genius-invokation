@@ -1596,9 +1596,9 @@ export class Game {
     }
 
     // Add preview and apply modifyAction
-    const skipError = (
-      ["toleratePreview", "skipPhase"] as ErrorLevel[]
-    ).includes(this.option.errorLevel);
+    // 预览只是「看一眼结算」，任何异常都不应该打断对局。
+    // 这里恒为 true：出错就丢掉这一条预览，并在 preview.ts 里留日志便于排查。
+    const skipError = true;
     const previewer = new ActionPreviewer(this.state, who, skipError);
     return await Promise.all(
       result.map((a) =>

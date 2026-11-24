@@ -107,7 +107,8 @@ class PreviewContext implements Disposable {
       if (e instanceof GiTcgPreviewAbortedError) {
         this.stopped = true;
       } else if (this.skipError) {
-        // skip.
+        // 预览异常不应该影响对局，记录后丢弃这一条预览
+        console?.warn?.(`[preview] skipped: ${(e as Error)?.message ?? e}`);
       } else {
         throw e;
       }
@@ -126,7 +127,8 @@ class PreviewContext implements Disposable {
       if (e instanceof GiTcgPreviewAbortedError) {
         this.stopped = true;
       } else if (this.skipError) {
-        // skip.
+        // 预览异常不应该影响对局，记录后丢弃这一条预览
+        console?.warn?.(`[preview] skipped: ${(e as Error)?.message ?? e}`);
       } else {
         throw e;
       }
