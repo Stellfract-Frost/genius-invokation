@@ -121,7 +121,7 @@ import {
   UNDERCURRENT_STACKS,
   CIRCULATION_DRAW_COUNT,
   CHARACTER_DERIVED_CARD_IDS,
-  VANISH_WHEN_PLAYED_IDS,
+  PLAYED_TO_BASE_ID,
   drawChaosRule,
   increaseCostByOne,
   redistributeShiftingDeltas,
@@ -617,11 +617,10 @@ export class Game {
     if (!hasRule(this.state, "circulation")) {
       return;
     }
-    // 秘传牌、衍生牌、幻戏系列打出后直接消失
+    // 秘传牌、衍生牌打出后直接消失
     if (
       card.definition.tags.includes("legend") ||
-      this.ruleIsDerivedCard(who, card) ||
-      VANISH_WHEN_PLAYED_IDS.has(card.definition.id)
+      this.ruleIsDerivedCard(who, card)
     ) {
       return;
     }
@@ -632,13 +631,21 @@ export class Game {
     if (!removed) {
       return;
     }
-    const variables = keepVariables
-      ? { ...removed.variables }
-      : Object.fromEntries(
-          Object.entries(card.definition.varConfigs).map(
-            ([name, { initialValue }]) => [name, initialValue],
-          ),
-        );
+    // 幻戏这类「离手即回炉」的牌：不论打出还是调和，进弃牌堆的都是原版定义，
+    // 变量也一并归位，避免低费档循环、也避免弃置减费残留
+    const baseId = PLAYED_TO_BASE_ID[card.definition.id];
+    const definition =
+      baseId !== undefined
+        ? (this.state.data.entities.get(baseId) ?? card.definition)
+        : card.definition;
+    const variables =
+      baseId !== undefined || !keepVariables
+        ? Object.fromEntries(
+            Object.entries(definition.varConfigs).map(
+              ([name, { initialValue }]) => [name, initialValue],
+            ),
+          )
+        : { ...removed.variables };
     this.mutate({
       type: "createEntity",
       target: { who, type: "discard", cardId: 0 },
@@ -648,7 +655,7 @@ export class Game {
         id: 0,
         // 打出的牌回到「定义本身」的状态：定义、变量、附着全部复位，
         // 否则变换过的定义会带着旧变量，看起来像效果没清除
-        definition: card.definition,
+        definition,
         variables,
         attachments: [],
       },

@@ -9,6 +9,7 @@ import { ref, setup, Character, State, Card, DiceCount, $ } from "#test";
 import { test, expect } from "vitest";
 import { Game, exposeState } from "@gi-tcg/core";
 import getData from "@gi-tcg/data";
+import { CountdownToTheShow2 } from "@gi-tcg/data/internal/cards/event/other.gts";
 import {
   DivineMarksmanship,
   SkywardSonnet,
@@ -577,4 +578,18 @@ test("circulation: 打出的牌进入弃牌堆时清除临时效果", async () =
   expect(played).toBeDefined();
   // 变化规则写入的临时变量不应残留
   expect(played!.variables.ruleCost ?? 0).toBe(0);
+});
+
+test("circulation: 幻戏低费档离手后，弃牌堆里是 3 费原版", async () => {
+  const c = setup(
+    <State config={{ roomRules: ["circulation"] }}>
+      <DiceCount my count={8} />
+      <Character my active def={Venti} />
+      <Character opp active />
+      <Card my def={CountdownToTheShow2} />
+    </State>,
+  );
+  await c.me.card(CountdownToTheShow2);
+  expect(c.state.players[0].discard.length).toBe(1);
+  expect(c.state.players[0].discard[0]!.definition.id).toBe(332032);
 });
