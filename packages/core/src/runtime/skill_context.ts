@@ -2067,6 +2067,12 @@ export class SkillContext<Meta extends ContextMetaBase> {
       try {
         area = card.area;
       } catch {
+        // 诊断日志：记录是哪张牌被重复弃置（牌定义 id 便于对数据层排查）
+        console?.warn?.(
+          `[discard] skipped already-removed card: ${
+            cardState?.definition?.id ?? "?"
+          }`,
+        );
         continue;
       }
       if (area.type !== "hands" && area.type !== "pile") {
