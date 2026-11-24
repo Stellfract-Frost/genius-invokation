@@ -30,7 +30,7 @@ export const ProfilesController = new Hono()
     for (const [id, version] of Object.entries(body?.versionMap ?? {})) {
       versionMap[Number(id)] = version as Version;
     }
-    const compiled = profilesService.createMerged(versions, versionMap);
+    const compiled = await profilesService.createMerged(versions, versionMap);
     return c.json(compiled.summary, 201);
   })
   .get("/:id", (c) => {

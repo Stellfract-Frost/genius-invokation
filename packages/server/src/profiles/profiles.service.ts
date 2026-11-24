@@ -351,10 +351,10 @@ export class ProfilesService {
    * 练习用：把若干版本合成一个 profile（幂等，进程重启后失效）。
    * baseVersion 取池内最高版本；versionMap 默认按规则自动生成。
    */
-  createMerged(
+  async createMerged(
     versions: Version[],
     versionMap?: Record<number, Version>,
-  ): CompiledProfile {
+  ): Promise<CompiledProfile> {
     if (!Array.isArray(versions) || versions.length === 0) {
       throw new BadRequestException("versions must be a non-empty array");
     }
