@@ -120,6 +120,7 @@ import {
   RULE_PLACEHOLDER_SKILL,
   UNDERCURRENT_STACKS,
   CIRCULATION_DRAW_COUNT,
+  CHARACTER_DERIVED_CARD_IDS,
   drawChaosRule,
   increaseCostByOne,
   redistributeShiftingDeltas,
@@ -570,7 +571,10 @@ export class Game {
    * 手牌、场地生成的不算；规则塞入牌库的牌（如禁忌知识）也不算。
    */
   private ruleIsDerivedCard(_who: 0 | 1, card: EntityState) {
-    return card.generated === true;
+    return (
+      card.generated === true ||
+      CHARACTER_DERIVED_CARD_IDS.has(card.definition.id)
+    );
   }
 
   /** 特殊规则「运转」：把未打出的手牌移入弃牌堆（秘传牌留在手上） */

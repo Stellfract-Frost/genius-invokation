@@ -165,6 +165,19 @@ export const EXTRA_DRAW_HANDS_COUNT = 7;
 /** 束缚每回合的可打出张数 */
 export const RESTRAINT_PLAY_LIMIT = 7;
 
+/**
+ * 由「角色专属效果」生成、但调用者不是角色本体/状态的牌。
+ *
+ * 目前只有爱可菲：她的「全频谱多重任务厨艺机关」是一张支援牌（support），
+ * 触发后生成料理。按定义 id 单独开例外，与角色衍生牌同待遇。
+ */
+export const CHARACTER_DERIVED_CARD_IDS: ReadonlySet<number> = new Set([
+  111152, // 鎏金殿堂
+  111153, // 雾凇秋分
+  111154, // 白浪拂沙
+  111155, // 一捧绿野
+]);
+
 /** 「运转」每回合的抽牌数 */
 export const CIRCULATION_DRAW_COUNT = 5;
 

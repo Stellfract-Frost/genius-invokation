@@ -94,6 +94,7 @@ import type {
 } from "../data/type";
 import { CALLED_FROM_REACTION } from "../reaction";
 import { diceIndex, flip, toSortedBy } from "@gi-tcg/utils";
+import { CHARACTER_DERIVED_CARD_IDS } from "../room_rules";
 import { GiTcgDataError, GiTcgPreviewAbortedError } from "../error";
 import { DetailLogType } from "../log";
 import {
@@ -1808,7 +1809,9 @@ export class SkillContext<Meta extends ContextMetaBase> {
     const markGenerated =
       callerType === "character" ||
       callerType === "combatStatus" ||
-      callerType === "attachment";
+      callerType === "attachment" ||
+      // 角色专属效果（如爱可菲的厨艺机关，虽是支援牌但只服务该角色）
+      CHARACTER_DERIVED_CARD_IDS.has(cardDef.id);
     const { state } = this.callAndEmit("createHandCard", who, cardDef, {
       markGenerated,
     });
