@@ -114,7 +114,7 @@ export function officialProfile(baseVersion: Version): CompiledProfile {
  *   （verifyDeckForProfile 会校验牌组版本不得高于 baseVersion）
  * - versionMap 用于把个别实体钉到池内另一个版本（强度按抽到的版本取）
  */
-export function customProfile(
+export async function customProfile(
   baseVersion: Version,
   options: {
     id: string;
@@ -124,8 +124,12 @@ export function customProfile(
     versionMap?: Record<number, Version>;
     fieldOverrides?: Record<number, { hp?: number; maxEnergy?: number }>;
     deck?: ProfileDeckConfig;
+    /** 赛事 mod（GTS 源码）：改写个别牌的效果，如船坞长剑、便携动力锯 */
+    mods?: ModSource[];
+    /** 赛事静态数据覆盖：描述文本、费用等 */
+    extraOverrides?: OverrideData[];
   },
-): CompiledProfile {
+): Promise<CompiledProfile> {
   const versionMap = options.versionMap ?? {};
   const rulesVersion = baseVersion;
   const dataVersion = options.dataVersion ?? rulesVersion;
@@ -140,10 +144,31 @@ export function customProfile(
   }
   const loader = new CustomDataLoader();
   loader.setVersion(resolver as never);
-  const [
+  // 「多版本即比赛版本」：把恋雨杯的 mod 一起编译，效果与描述才与官方一致。
+  // 单个 mod 失败只跳过它，不连累整套版本映射。
+  for (const mod of options.mods ?? []) {
+    try {
+      await loader.loadMod(mod.content);
+    } catch (cause) {
+      console.warn(
+        `[practice] ${options.id} mod 加载失败（已跳过）：${(cause as Error).message}`,
+      );
+    }
+  }
+  let [
     data,
     { officialDeckCompatible, customData = [], overrideData = [] },
   ] = loader.done();
+  if (!officialDeckCompatible && (options.mods ?? []).length > 0) {
+    // mod 让数据不再兼容官方卡组：丢弃 mod，退回无 mod 的编译结果，
+    // 保证多版本配置仍然可用（宁可不改效果，也不能让对局开不起来）
+    console.warn(
+      `[practice] ${options.id} 应用赛事 mod 后不再兼容官方卡组，已回退为无 mod 版本`,
+    );
+    const plainFormatter = new CustomDataLoader();
+    plainFormatter.setVersion(resolver as never);
+    [data, { customData, overrideData }] = plainFormatter.done();
+  }
   // 集所长的字段级覆盖：本体取池内血量最高的版本，充能取池内最低值。
   // 注意：GameData 里的角色定义是全局共享的，直接改会污染其它 profile，
   // 因此这里做写时复制：只替换被覆盖的角色，并新建 Map。
@@ -258,7 +283,7 @@ export function customProfile(
       gameConfig: { ...DEFAULT_GAME_CONFIG },
       versionBehavior: getVersionBehavior(rulesVersion),
       versionMap,
-      mods: [],
+      mods: options.mods ?? [],
       ...(options.deck ? { deck: options.deck } : {}),
       assets: {
         // 逐实体版本映射：前端据此按实体版本渲染角色/技能/卡牌，而不是只按 base 显示
@@ -267,6 +292,7 @@ export function customProfile(
         // 字段级覆盖（如集所长压低的充能）必须一起下发，否则前端仍按静态数据显示
         overrideData: [
           ...overrideData,
+          ...(options.extraOverrides ?? []),
           ...Object.entries(options.fieldOverrides ?? {}).map(([id, ov]) => ({
             id: Number(id),
             ...ov,

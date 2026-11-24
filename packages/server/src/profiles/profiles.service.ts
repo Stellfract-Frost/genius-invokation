@@ -375,7 +375,14 @@ export class ProfilesService {
       .filter((id) => CHAR_BODY[id]![0]![0] > selectedMaxIdx);
     const name = "比赛版本";
     const overrides = this.fieldOverrides(sorted);
-    const build = (vm: Record<number, Version>) => {
+    // 「多版本即比赛版本」：手牌（行动牌）的效果与描述一律按恋雨杯来，
+    // 因此把恋雨杯 preset 的 mod 与静态覆盖一起带进 practice 配置。
+    const lianyuPreset =
+      this.profiles.get("piovium/lianyu-s1") ??
+      this.profiles.get("piovium/lianyu-live");
+    const lianyuMods = lianyuPreset?.profile.mods ?? [];
+    const lianyuOverrides = lianyuPreset?.profile.assets.overrideData ?? [];
+    const build = async (vm: Record<number, Version>) => {
       const pinTag = Object.keys(vm).length;
       const id = `practice/${sorted.join("-")}${pinTag ? `#${pinTag}` : ""}`;
       return customProfile(baseVersion, {
@@ -384,6 +391,8 @@ export class ProfilesService {
         dataVersion,
         versionMap: vm,
         fieldOverrides: overrides,
+        mods: lianyuMods,
+        extraOverrides: lianyuOverrides,
         deck: {
           blacklist: characterBlacklist,
           allowNewerCards: true,
@@ -401,7 +410,7 @@ export class ProfilesService {
     let lastErr: unknown = null;
     for (const level of levels) {
       try {
-        compiled = build(level.vm());
+        compiled = await build(level.vm());
         if (level !== levels[0]) {
           console.warn(`[practice] ${sorted.join("+")} 降级为「${level.name}」`);
         }
