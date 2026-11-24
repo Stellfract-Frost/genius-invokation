@@ -113,6 +113,9 @@ onEndPhase（月感电等「回合结束」效果）
 | **秘传牌打出** | 直接消失 |
 | **衍生牌打出** | 直接消失 |
 | 被「舍弃」的牌 | 不进任何堆 |
+| 幻戏系列（332032-332035）**打出** | 回炉为 3 费原版（`PLAYED_TO_BASE_ID`），变量归位 |
+| 幻戏系列**调和** | 按当时档位原样进堆（不回炉） |
+| 爱可菲料理（111152-111155） | 同角色衍生牌：回合结束留手、打出消失 |
 
 ### 4.4 衍生牌判定
 
@@ -130,6 +133,11 @@ private ruleIsDerivedCard(_who, card) {
 - 手牌生成、场地生成、规则塞入牌库的牌（如禁忌知识）**都不算**，按普通牌待遇（打出进弃牌堆、回合结束照常弃置）。
 - 标记写在 `mutator.createHandCard` 构造 `cardState` 时（**不要**写在 `insertHandCard`，见 7.1）。
 - 曾经用「定义不在初始牌库」作兜底，导致禁忌知识被误判为衍生牌、回合结束留在手上。已移除，不要加回来。
+- 两个按 id 的例外表（都在 `room_rules.ts`）：
+  - `CHARACTER_DERIVED_CARD_IDS`：爱可菲的四张料理（111152-111155）。她的「全频谱多重任务厨艺机关」是 **support**，
+    按调用者类型判断会漏掉，只能按牌 id 补。
+  - `PLAYED_TO_BASE_ID`：幻戏系列（332032/332033/332034/332035）**打出**后回炉为 332032。
+    0 费那张叫「幻戏开始！」（332035），按名字搜会漏，务必按 id 找。
 
 ### 4.5 洗回
 
@@ -229,7 +237,25 @@ if (rules.includes("circulation") && pile.length === 0) {
 
 `compiler.ts` 把 `{...DEFAULT_GAME_CONFIG}`（含 `initialHandsCount: 5`）塞进 profile，`start()` 展开后覆盖规则设置。「抽牌」规则因此改为**无条件**强制 7 张。
 
-### 7.10 技能 action 的 targets 可能为 0
+### 7.10 别用「运行时区域查询」做静态判定
+
+判断"这张牌是不是角色生成的"时，早期版本查了调用者当前在哪个区域（`getEntityArea` / `_getEntityArea`）。
+问题是**角色状态触发的技能执行完，状态会自毁**，等走到生成手牌那步，调用者已经不在了——
+预览重放时必然触发 `Cannot found entity -xxxxx`，整个对局弹致命错误。
+
+正确做法：只读 `this.self.definition.type`（静态信息），
+`character` / `combatStatus` / `attachment` 视为角色侧。
+带缓存的 `_getEntityArea` 更危险：预览用的 state 副本会命中主状态留下的缓存。
+
+### 7.11 改 async 要同步所有调用方
+
+给 `customProfile` 加 mod 编译能力时把它改成 async，但外层 `createMerged` 没跟着改，
+`await` 待在非 async 函数里 → ts-node 直接语法报错 → 服务启动崩溃循环、全站 502。
+
+本地 `tsc` 会被 workspace 依赖缺失、`console` 类型等噪声淹没这条错误。
+部署前应当只筛语法级错误（或用 `--noEmit` 检查后单独看目标文件）。
+
+### 7.12 技能 action 的 targets 可能为 0
 
 普攻默认打出战角色，`targets` 长度为 0。测试里 `c.me.skill(handle, ref)` 传多余目标会匹配失败，直接不传即可。
 
@@ -256,4 +282,5 @@ corepack pnpm -C packages/test exec vitest run
 - [ ] 牌库 24 张（需要把「运转」提升为 profile，并同步卡组编辑器与校验）
 - [ ] 弃牌堆用真实卡背图（页面层需要拿到 assets 管理器）
 - [ ] 复制类效果产生的牌：若走 `createHandCard` 会正确标记；若走其它路径靠初始牌库兜底判断
-- [ ] 多版本卡组的卡牌（装备/行动牌）版本映射仍取最新版，未按恋雨杯规则解析
+- [x] 多版本卡组的行动牌按恋雨杯解析：版本映射（`CARD_PIN`）+ 赛事 mod（`customProfile.mods`）
+- [ ] 多版本场景下，恋雨杯 mod 若与其它牌冲突，只会在日志里留一条降级提示，需要人工留意
