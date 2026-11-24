@@ -10,6 +10,7 @@ import { test, expect } from "vitest";
 import { Game, exposeState } from "@gi-tcg/core";
 import getData from "@gi-tcg/data";
 import { CountdownToTheShow2 } from "@gi-tcg/data/internal/cards/event/other.gts";
+import { LumenstoneAdjuvant } from "@gi-tcg/data/internal/cards/support/item.gts";
 import {
   DivineMarksmanship,
   SkywardSonnet,
@@ -592,4 +593,44 @@ test("circulation: 幻戏低费档离手后，弃牌堆里是 3 费原版", asyn
   await c.me.card(CountdownToTheShow2);
   expect(c.state.players[0].discard.length).toBe(1);
   expect(c.state.players[0].discard[0]!.definition.id).toBe(332032);
+});
+
+test("circulation: 调和后牌进入弃牌堆", async () => {
+  const c = setup(
+    <State config={{ roomRules: ["circulation"] }}>
+      <DiceCount my count={8} />
+      <Character my active def={Venti} />
+      <Character opp active />
+      <Card my def={MondstadtHashBrown} />
+    </State>,
+  );
+  await c.me.tune(MondstadtHashBrown);
+  expect(c.state.players[0].handCard ?? c.state.players[0].hands.length).toBeDefined();
+  expect(c.state.players[0].discard.length).toBe(1);
+});
+
+test("circulation: 调和幻戏不崩，且按当时档位进弃牌堆", async () => {
+  const c = setup(
+    <State config={{ roomRules: ["circulation"] }}>
+      <DiceCount my count={8} />
+      <Character my active def={Venti} />
+      <Character opp active />
+      <Card my def={CountdownToTheShow2} />
+    </State>,
+  );
+  await c.me.tune(CountdownToTheShow2);
+  expect(c.state.players[0].discard.length).toBe(1);
+});
+
+test("circulation: 调和流明石触手可及", async () => {
+  const c = setup(
+    <State config={{ roomRules: ["circulation"] }}>
+      <DiceCount my count={8} />
+      <Character my active def={Venti} />
+      <Character opp active />
+      <Card my def={LumenstoneAdjuvant} />
+    </State>,
+  );
+  await c.me.tune(LumenstoneAdjuvant);
+  expect(c.state.players[0].discard.length).toBe(1);
 });

@@ -536,10 +536,15 @@ export function exposeEntity(
     hide || state === null
       ? {}
       : Object.fromEntries(
-          Object.entries(e.definition.descriptionDictionary).map(([k, v]) => [
-            k,
-            v(state, e.id),
-          ]),
+          Object.entries(e.definition.descriptionDictionary).map(([k, v]) => {
+            try {
+              return [k, v(state, e.id)];
+            } catch {
+              // 实体在传入的 state 里已不存在（预览副本、或已被弃置的牌），
+              // 动态描述无法求值，退化为空串，不能让渲染整页崩掉
+              return [k, ""];
+            }
+          }),
         );
   const hasUsagePerRound = USAGE_PER_ROUND_VARIABLE_NAMES.some(
     (name) => e.variables[name],
