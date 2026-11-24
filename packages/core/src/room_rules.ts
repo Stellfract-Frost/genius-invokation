@@ -178,6 +178,19 @@ export const CHARACTER_DERIVED_CARD_IDS: ReadonlySet<number> = new Set([
   111155, // 一捧绿野
 ]);
 
+/**
+ * 打出后直接消失、但**回合结束仍按普通牌弃置**的牌。
+ *
+ * 幻戏倒计时系列：被舍弃时会生成费用低 1 的下一档并置入牌库顶。
+ * 若这些牌打出后还进弃牌堆、被洗回牌库，会形成无限低费循环，
+ * 所以打出即消失；但未打出时仍正常进弃牌堆（否则会囤在手上）。
+ */
+export const VANISH_WHEN_PLAYED_IDS: ReadonlySet<number> = new Set([
+  332032, // 幻戏倒计时：3
+  332033, // 幻戏倒计时：2
+  332034, // 幻戏倒计时：1
+]);
+
 /** 「运转」每回合的抽牌数 */
 export const CIRCULATION_DRAW_COUNT = 5;
 

@@ -562,3 +562,19 @@ test("circulation: 非角色生成的牌不算衍生牌，打出后进入弃牌�
   await c.me.card(MondstadtHashBrown, target);
   expect(c.state.players[0].discard.length).toBe(1);
 });
+
+test("circulation: 打出的牌进入弃牌堆时清除临时效果", async () => {
+  const c = setup(
+    <State config={{ roomRules: ["circulation"] }}>
+      <Character my active def={Venti} />
+      <Character my def={Venti} />
+      <Character opp active />
+      <Card my def={ChangingShifts} v={{ ruleCost: -1 }} />
+    </State>,
+  );
+  await c.me.card(ChangingShifts);
+  const played = c.state.players[0].discard[0];
+  expect(played).toBeDefined();
+  // 变化规则写入的临时变量不应残留
+  expect(played!.variables.ruleCost ?? 0).toBe(0);
+});

@@ -121,6 +121,7 @@ import {
   UNDERCURRENT_STACKS,
   CIRCULATION_DRAW_COUNT,
   CHARACTER_DERIVED_CARD_IDS,
+  VANISH_WHEN_PLAYED_IDS,
   drawChaosRule,
   increaseCostByOne,
   redistributeShiftingDeltas,
@@ -616,10 +617,11 @@ export class Game {
     if (!hasRule(this.state, "circulation")) {
       return;
     }
-    // 秘传牌、衍生牌打出后直接消失
+    // 秘传牌、衍生牌、幻戏系列打出后直接消失
     if (
       card.definition.tags.includes("legend") ||
-      this.ruleIsDerivedCard(who, card)
+      this.ruleIsDerivedCard(who, card) ||
+      VANISH_WHEN_PLAYED_IDS.has(card.definition.id)
     ) {
       return;
     }
