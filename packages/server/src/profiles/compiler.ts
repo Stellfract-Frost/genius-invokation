@@ -128,6 +128,11 @@ export async function customProfile(
     mods?: ModSource[];
     /** 赛事静态数据覆盖：描述文本、费用等 */
     extraOverrides?: OverrideData[];
+    /**
+     * 行动牌的数据来源（赛事配置的编译产物）。
+     * 多版本即比赛版本：手牌一律用赛事那份数据，角色仍按所选版本。
+     */
+    cardDataFrom?: CompiledProfile;
   },
 ): Promise<CompiledProfile> {
   const versionMap = options.versionMap ?? {};
@@ -274,6 +279,25 @@ export async function customProfile(
     }
     patched = { ...data, characters: chars } as typeof data;
   }
+  // 「多选版本 = 比赛版本」：行动牌（3 开头）的定义整体改用赛事配置的编译产物，
+  // 这样费用/描述/效果与官方赛事完全一致，不再依赖版本映射去猜。
+  let entities = patched.entities;
+  if (options.cardDataFrom) {
+    const merged = new Map(patched.entities);
+    let replaced = 0;
+    for (const [id, def] of options.cardDataFrom.data.entities) {
+      if (id >= 300000 && id < 400000) {
+        merged.set(id, def);
+        replaced += 1;
+      }
+    }
+    console.warn(
+      `[practice] ${options.id} 行动牌改用赛事数据: ${replaced} 个定义`,
+    );
+    entities = merged;
+  }
+  const finalData = entities === patched.entities ? patched : { ...patched, entities };
+
   return finishProfile(
     {
       id: options.id,
@@ -306,7 +330,7 @@ export async function customProfile(
         officialDeckCompatible,
       },
     },
-    patched,
+    finalData,
   );
 }
 

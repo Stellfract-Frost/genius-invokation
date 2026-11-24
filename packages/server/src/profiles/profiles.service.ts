@@ -393,6 +393,7 @@ export class ProfilesService {
         fieldOverrides: overrides,
         mods: lianyuMods,
         extraOverrides: lianyuOverrides,
+        cardDataFrom: lianyuPreset,
         deck: {
           blacklist: characterBlacklist,
           allowNewerCards: true,
