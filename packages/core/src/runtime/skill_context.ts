@@ -2060,7 +2060,15 @@ export class SkillContext<Meta extends ContextMetaBase> {
       }
       const card = this.get(c);
       const cardState = card.latest();
-      const area = card.area;
+      // 幂等：牌可能已经被上一个事件结算掉了。典型例子是丝柯克的「诸武相授」——
+      // 同一张牌同时挂 on actionPhase 与 on switchActive，都执行 discard(:self)，
+      // 第二次进来时实体已不在，查 area 会抛 Cannot found entity。
+      let area: EntityArea;
+      try {
+        area = card.area;
+      } catch {
+        continue;
+      }
       if (area.type !== "hands" && area.type !== "pile") {
         throw new GiTcgDataError(
           `Cannot dispose card ${stringifyState(card)} from player ${
