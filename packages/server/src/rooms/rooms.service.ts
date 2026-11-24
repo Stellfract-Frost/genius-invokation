@@ -419,6 +419,11 @@ class Player implements PlayerIOWithError {
 
   onError(e: unknown) {
     const message = inspect(e);
+    // 这个异常原本只推给客户端，服务端不留痕迹，排查时完全看不到。
+    console.error(`[room] game error://n${message}`);
+    if (e instanceof Error && e.stack) {
+      console.error(e.stack);
+    }
     this.errorSseSource.next({
       type: "error",
       message,

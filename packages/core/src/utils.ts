@@ -184,9 +184,9 @@ export function getEntityById(state: GameState, id: number): AnyState {
       )
       .join(" | ");
   })();
-  throw new GiTcgCoreInternalError(
-    `Cannot found entity ${id}\n${dump}`,
-  );
+  // 快照只写日志，不进错误消息（否则玩家弹窗里会看到一长串 id）
+  console?.error?.(`[core] cannot found entity ${id} :: ${dump}`);
+  throw new GiTcgCoreInternalError(`Cannot found entity ${id}`);
 }
 
 /**
