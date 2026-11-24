@@ -1798,7 +1798,10 @@ export class SkillContext<Meta extends ContextMetaBase> {
     // 只有「角色侧」生成的牌算衍生牌：
     // 角色本体、角色身上的状态/装备都落在 characters 区域；
     // 手牌（hands）、场地/召唤物（supports/summons）生成的不算
-    const callerArea = this._getEntityArea(this.self.id);
+    // 注意：不要用 _getEntityArea（它带 areaCache）。
+    // 预览（preview）会在 state 副本上重放动作，缓存里的区域会指向已失效的实体，
+    // 导致 "Cannot found entity -xxxxx"。这里直接按当前 state 现算。
+    const callerArea = getEntityArea(this.rawState, this.self.id);
     const markGenerated = callerArea.type === "characters";
     const { state } = this.callAndEmit("createHandCard", who, cardDef, {
       markGenerated,

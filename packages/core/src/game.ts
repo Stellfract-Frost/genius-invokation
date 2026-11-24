@@ -637,7 +637,15 @@ export class Game {
       type: "createEntity",
       target: { who, type: "discard", cardId: 0 },
       ...(toBottom ? { targetIndex: 0 } : {}),
-      value: { ...removed, id: 0, variables },
+      value: {
+        ...removed,
+        id: 0,
+        // 打出的牌回到「定义本身」的状态：定义、变量、附着全部复位，
+        // 否则变换过的定义会带着旧变量，看起来像效果没清除
+        definition: card.definition,
+        variables,
+        attachments: [],
+      },
     });
   }
 
