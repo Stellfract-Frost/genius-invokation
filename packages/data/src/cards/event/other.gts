@@ -1672,7 +1672,8 @@ define combatStatus {
  */
 define card {
   id 301020 as ForbiddenKnowledge;
-  since "v4.7.0";
+  // 房间规则也能在早于此牌正式登场的版本中生成它。
+  since "v3.3.0";
   undiscoverable;
   tags abyss;
   disableTuning;

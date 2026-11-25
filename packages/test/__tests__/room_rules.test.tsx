@@ -7,10 +7,25 @@
 
 import { ref, setup, Character, State, Card, DiceCount, $ } from "#test";
 import { test, expect } from "vitest";
-import { Game, exposeState } from "@gi-tcg/core";
+import {
+  Game,
+  StateSymbol,
+  deserializeGameStateLog,
+  exposeState,
+  getRuleRuntime,
+  serializeGameStateLog,
+} from "@gi-tcg/core";
 import getData from "@gi-tcg/data";
-import { CountdownToTheShow2 } from "@gi-tcg/data/internal/cards/event/other.gts";
-import { LumenstoneAdjuvant } from "@gi-tcg/data/internal/cards/support/item.gts";
+import {
+  CountdownToTheShow2,
+  CountdownToTheShow3,
+  ForbiddenKnowledge,
+} from "@gi-tcg/data/internal/cards/event/other.gts";
+import {
+  LumenstoneAdjuvant,
+  Nre,
+} from "@gi-tcg/data/internal/cards/support/item.gts";
+import { Ganyu } from "@gi-tcg/data/internal/characters/cryo/ganyu.gts";
 import {
   DivineMarksmanship,
   SkywardSonnet,
@@ -494,15 +509,17 @@ test("circulation: 打出的事件牌进入弃牌堆", async () => {
 
 test("circulation: 没有该规则时手牌不会在回合结束被弃置", async () => {
   const c = setup(
-    <State>
+    <State roundNumber={3}>
       <Character my active def={Venti} />
       <Character opp active />
       <Card my def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
     </State>,
   );
   await c.me.end();
   await c.opp.end();
-  expect(c.state.players[0].hands.length).toBe(1);
+  expect(c.state.players[0].hands.length).toBe(2);
+  expect(c.state.players[0].pile.length).toBe(0);
   expect(c.state.players[0].discard.length).toBe(0);
 });
 
@@ -550,6 +567,183 @@ test("circulation: 抽牌途中牌库抽空会立刻用弃牌堆补齐", async (
   expect(c.state.players[0].hands.length).toBe(3);
   expect(c.state.players[0].pile.length).toBe(0);
   expect(c.state.players[0].discard.length).toBe(0);
+});
+
+test("circulation: 第三回合双方抽完最后一张牌后各塞入两张禁忌知识", async () => {
+  const c = setup(
+    <State config={{ roomRules: ["circulation"] }} roundNumber={3}>
+      <Character my active def={Venti} />
+      <Character opp active />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card opp pile def={MondstadtHashBrown} />
+      <Card opp pile def={MondstadtHashBrown} />
+      <Card opp pile def={MondstadtHashBrown} />
+      <Card opp pile def={MondstadtHashBrown} />
+      <Card opp pile def={MondstadtHashBrown} />
+    </State>,
+  );
+  await c.me.end();
+  await c.opp.end();
+  for (const player of c.state.players) {
+    expect(player.hands).toHaveLength(5);
+    expect(player.pile.map((card) => card.definition.id)).toEqual([
+      ForbiddenKnowledge,
+      ForbiddenKnowledge,
+    ]);
+  }
+});
+
+test("circulation: 首回合抽完最后一张就洗回弃牌堆", async () => {
+  const c = setup(
+    <State config={{ roomRules: ["circulation"] }}>
+      <Character my active def={Venti} />
+      <Character opp active />
+      <Card my def={ChangingShifts} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+      <Card my pile def={MondstadtHashBrown} />
+    </State>,
+  );
+  await c.me.end();
+  await c.opp.end();
+  const { pile, discard } = c.state.players[0];
+  expect(discard).toHaveLength(0);
+  expect(pile.map((card) => card.definition.id)).toEqual([ChangingShifts]);
+});
+
+test("circulation: 牌库容量有限时为新禁忌知识留位并保留未洗回的牌", async () => {
+  const c = setup(
+    <State config={{ roomRules: ["circulation"], maxPileCount: 3 }} roundNumber={3}>
+      <Character my active def={Venti} />
+      <Character opp active />
+      <Card my def={ChangingShifts} />
+      <Card my def={ChangingShifts} />
+      <Card my def={ChangingShifts} />
+      <Card my def={ChangingShifts} />
+      <Card my def={ChangingShifts} />
+      <Card my pile def={MondstadtHashBrown} />
+    </State>,
+  );
+  await c.me.end();
+  await c.opp.end();
+  const { hands, pile, discard } = c.state.players[0];
+  const total = [...hands, ...pile, ...discard].map((card) => card.definition.id);
+  expect(hands).toHaveLength(5);
+  expect(total.filter((id) => id === ForbiddenKnowledge)).toHaveLength(2);
+  expect(total.filter((id) => id === ChangingShifts)).toHaveLength(5);
+  expect(total.filter((id) => id === MondstadtHashBrown)).toHaveLength(1);
+});
+
+test("circulation: 同一回合反复抽空只塞入一次，下回合可以再触发", async () => {
+  const c = setup(
+    <State config={{ roomRules: ["circulation"] }} roundNumber={2}>
+      <Character my active def={Venti} />
+      <Character opp active />
+      <Card my def={CountdownToTheShow3} />
+      <Card my def={CountdownToTheShow3} />
+      <Card my pile def={MondstadtHashBrown} />
+    </State>,
+  );
+  const countKnowledge = () => {
+    const { hands, pile, discard } = c.state.players[0];
+    return [...hands, ...pile, ...discard].filter(
+      (card) => card.definition.id === ForbiddenKnowledge,
+    ).length;
+  };
+  await c.me.card(CountdownToTheShow3);
+  expect(c.state.players[0].pile).toHaveLength(0);
+  expect(countKnowledge()).toBe(1);
+  await c.me.card(CountdownToTheShow3);
+  expect(c.state.players[0].pile).toHaveLength(0);
+  expect(countKnowledge()).toBe(1);
+  await c.me.end();
+  await c.opp.end();
+  expect(countKnowledge()).toBe(1);
+  await c.me.end();
+  await c.opp.end();
+  expect(countKnowledge()).toBe(3);
+});
+
+test("circulation: 旧版规则下指定类别抽到最后一张也会塞入禁忌知识", async () => {
+  const c = setup(
+    <State
+      dataVersion="v3.3.0"
+      config={{ roomRules: ["circulation"] }}
+      roundNumber={3}
+    >
+      <Character my active def={Ganyu} />
+      <Character opp active def={Ganyu} />
+      <Card my def={Nre} />
+      <Card my pile def={MondstadtHashBrown} />
+    </State>,
+  );
+  await c.me.card(Nre);
+  expect(c.state.players[0].hands.map((card) => card.definition.id)).toEqual([
+    MondstadtHashBrown,
+  ]);
+  expect(c.state.players[0].pile.map((card) => card.definition.id)).toEqual([
+    ForbiddenKnowledge,
+    ForbiddenKnowledge,
+  ]);
+});
+
+test("circulation: 指定类别抽牌也会先从弃牌堆补空牌库", async () => {
+  const c = setup(
+    <State config={{ roomRules: ["circulation"] }} roundNumber={2}>
+      <DiceCount my count={8} />
+      <Character my active def={Venti} />
+      <Character opp active />
+      <Card my def={Nre} />
+      <Card my def={MondstadtHashBrown} />
+    </State>,
+  );
+  await c.me.tune(MondstadtHashBrown);
+  await c.me.card(Nre);
+  const { hands, pile, discard } = c.state.players[0];
+  expect(discard).toHaveLength(0);
+  expect(hands.map((card) => card.definition.id)).toEqual([MondstadtHashBrown]);
+  expect(pile.map((card) => card.definition.id)).toEqual([ForbiddenKnowledge]);
+});
+
+test("circulation: 回放还原弃牌堆与特殊规则状态", async () => {
+  const c = setup(
+    <State config={{ roomRules: ["circulation"] }}>
+      <DiceCount my count={8} />
+      <Character my active def={Venti} />
+      <Character opp active />
+      <Card my def={MondstadtHashBrown} />
+    </State>,
+  );
+  await c.me.tune(MondstadtHashBrown);
+  const log = serializeGameStateLog([{ state: c.state, canResume: true }]);
+  const [{ state }] = deserializeGameStateLog(c.state.data, log);
+  expect(state.players[0].discard[0]?.[StateSymbol]).toBe("entity");
+  expect(getRuleRuntime(state)).toEqual(getRuleRuntime(c.state));
+  expect(exposeState(0, state).player[0]?.discardCard[0]?.definitionId).toBe(
+    MondstadtHashBrown,
+  );
+});
+
+test("circulation: 旧回放缺少弃牌堆和特殊规则字段时仍可加载", () => {
+  const data = getData();
+  const deck = { characters: [1101, 1201, 1301], cards: [] };
+  const initial = Game.createInitialState({ data, decks: [deck, deck] });
+  const log = serializeGameStateLog([{ state: initial, canResume: true }]);
+  for (const entry of log.store) {
+    if (entry && typeof entry === "object") {
+      Reflect.deleteProperty(entry, "discard");
+      Reflect.deleteProperty(entry, "roomRules");
+    }
+  }
+  const [{ state }] = deserializeGameStateLog(data, log);
+  expect(state.config.roomRules).toEqual([]);
+  expect(exposeState(0, state).player.map((p) => p.discardCard)).toEqual([[], []]);
 });
 
 test("circulation: 非角色生成的牌不算衍生牌，打出后进入弃牌堆", async () => {

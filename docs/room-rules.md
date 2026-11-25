@@ -141,22 +141,11 @@ private ruleIsDerivedCard(_who, card) {
 
 ### 4.5 洗回
 
-抽牌**逐张**进行，每抽一张前检查牌库：
+普通抽牌和按条件抽牌都会逐张检查牌库。抽牌开始时若牌库为空，先洗回弃牌堆。实际抽到最后一张时立即洗回，即使当次抽牌刚好结束。
 
-```ts
-// mutator.drawCardsPlain 内部
-if (rules.includes("circulation") && pile.length === 0) {
-  this.reshuffleDiscardIntoPile(who);
-}
-```
+第 n 回合，双方各自在首次抽到自己牌库最后一张牌时，额外把（n−1）张「禁忌知识」与弃牌堆洗回的同名牌一起均匀塞入牌库。第 1 回合加入 0 张。同一回合再次抽空时，继续洗回弃牌堆。
 
-`reshuffleDiscardIntoPile`：
-
-1. 取出整个弃牌堆，逐张 `removeEntity(reason: "reshuffle")`；
-2. 普通牌用 `insertPileCards(payloads, "random", who)`；
-3. 禁忌知识（`RULE_RELATED_DEFINITION_IDS.forbiddenKnowledge`）用 `"spaceAround"` 均匀插入。
-
-因为放在抽牌原语内部，**技能抽牌、场地抽牌、打出抽牌牌**都能覆盖，不需要在每处调用点重复处理。
+洗回前先为新增的「禁忌知识」预留容量。普通牌随机洗入，超出容量的旧牌留在弃牌堆。
 
 ## 5. 前端
 
@@ -189,7 +178,7 @@ if (rules.includes("circulation") && pile.length === 0) {
 - `buildDeckMatchesProfileDbFilter` 必须同步放开，否则卡组列表仍会被过滤。
 - 游客卡组过滤接口要透传 `versions`，否则这条通道仍然受限。
 
-**现状**：牌库容量仍是卡组实际张数（30）。「运转」要求的 24 张尚未实现——要动 `verifyDeck`（写死 30）、DTO（`== 30`）和卡组编辑器计数，且需要把「运转」提升为 profile 才能让编辑器提前知道容量。
+当前编辑器和房间校验要求初始牌组为 30 张。「运转」专用的 24 张牌组列入待办。
 
 ## 7. 踩坑清单
 
@@ -279,8 +268,6 @@ corepack pnpm -C packages/test exec vitest run
 
 ## 10. 待办与已知边界
 
-- [ ] 牌库 24 张（需要把「运转」提升为 profile，并同步卡组编辑器与校验）
+- [ ] 实现「运转」专用的 24 张初始牌组。同步卡组编辑器、游客与账号牌组校验、开房和加入对局的合法性检查，保留已有 30 张普通牌组的使用方式。
 - [ ] 弃牌堆用真实卡背图（页面层需要拿到 assets 管理器）
-- [ ] 复制类效果产生的牌：若走 `createHandCard` 会正确标记；若走其它路径靠初始牌库兜底判断
-- [x] 多版本卡组的行动牌按恋雨杯解析：版本映射（`CARD_PIN`）+ 赛事 mod（`customProfile.mods`）
-- [ ] 多版本场景下，恋雨杯 mod 若与其它牌冲突，只会在日志里留一条降级提示，需要人工留意
+- [x] 多版本房间按房主牌组保存的版本组合建立配置，行动牌沿用已编译的恋雨杯 Live 定义及对应静态资料。

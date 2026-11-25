@@ -115,7 +115,6 @@ import {
   EXTRA_DRAW_HANDS_COUNT,
   FORBIDDEN_KNOWLEDGE_COUNT,
   RESTRAINT_PLAY_LIMIT,
-  RULE_EXTENSION_ID,
   RULE_RELATED_DEFINITION_IDS,
   RULE_PLACEHOLDER_SKILL,
   UNDERCURRENT_STACKS,
@@ -378,21 +377,6 @@ export class Game {
   // 特殊规则（房间级修饰）
   // ---------------------------------------------------------------
 
-  private setRuleRuntime(next: RoomRuleRuntimeState) {
-    if (
-      !this.state.extensions.some(
-        (ext) => ext.definition.id === RULE_EXTENSION_ID,
-      )
-    ) {
-      return;
-    }
-    this.mutate({
-      type: "mutateExtensionState",
-      extensionId: RULE_EXTENSION_ID,
-      newState: next,
-    });
-  }
-
   /** 规则效果自身需要一个 `via`，这里伪造一个不含任何技能的被动技能定义 */
   private ruleSkillInfo(caller: AnyState): SkillInfo {
     return {
@@ -405,29 +389,13 @@ export class Game {
     };
   }
 
-  /** 开局：双方牌库随机塞入「禁忌知识」 */
+  /** 开局：双方牌库均匀塞入「禁忌知识」 */
   private ruleInjectForbiddenKnowledge() {
     if (!hasRule(this.state, "forbiddenKnowledge")) {
       return;
     }
-    const definition = this.state.data.entities.get(
-      RULE_RELATED_DEFINITION_IDS.forbiddenKnowledge,
-    );
-    if (typeof definition === "undefined") {
-      return;
-    }
     for (const who of [0, 1] as const) {
-      const payloads = Array.from({ length: FORBIDDEN_KNOWLEDGE_COUNT }, () => ({
-        type: "createEntity" as const,
-        target: { who, type: "pile" as const, cardId: 0 },
-        value: {
-          id: 0,
-          definition,
-          variables: {},
-          attachments: [],
-        },
-      }));
-      this.mutator.insertPileCards(payloads, "spaceAround", who);
+      this.mutator.insertForbiddenKnowledge(who, FORBIDDEN_KNOWLEDGE_COUNT);
     }
   }
 
@@ -446,7 +414,7 @@ export class Game {
     if (hasRule(this.state, "chaos")) {
       next = drawChaosRule(next, () => this.mutator.stepRandom());
     }
-    this.setRuleRuntime(next);
+    this.mutator.setRuleRuntime(next);
 
     // 混沌抽到「抽牌」：本回合立即抽 2 张
     if (hasRule(this.state, "chaos") && next.chaosActive === "extraDraw") {
@@ -564,14 +532,14 @@ export class Game {
       number,
     ];
     playedCards[who] += 1;
-    this.setRuleRuntime({ ...runtime, playedCards });
+    this.mutator.setRuleRuntime({ ...runtime, playedCards });
   }
 
   /**
    * 是否是衍生牌：仅限「角色技能生成」的牌（createHandCard 时打了标记）。
    * 手牌、场地生成的不算；规则塞入牌库的牌（如禁忌知识）也不算。
    */
-  private ruleIsDerivedCard(_who: 0 | 1, card: EntityState) {
+  private ruleIsDerivedCard(card: EntityState) {
     return (
       card.generated === true ||
       CHARACTER_DERIVED_CARD_IDS.has(card.definition.id)
@@ -584,7 +552,7 @@ export class Game {
       // 秘传牌与衍生牌保留在手上
       if (
         card.definition.tags.includes("legend") ||
-        this.ruleIsDerivedCard(who, card)
+        this.ruleIsDerivedCard(card)
       ) {
         continue;
       }
@@ -605,7 +573,7 @@ export class Game {
   /**
    * 特殊规则「运转」：打出/调和的牌进入弃牌堆。
    *
-   * 秘传牌打出即消失；衍生牌（不在初始牌库中的牌）同样用完即消失。
+   * 秘传牌与角色生成的衍生牌打出后直接消失。
    * `toBottom` 为真时插到弃牌堆底部（调和用）。
    */
   private ruleRecyclePlayedCard(
@@ -620,7 +588,7 @@ export class Game {
     // 秘传牌、衍生牌打出后直接消失
     if (
       card.definition.tags.includes("legend") ||
-      this.ruleIsDerivedCard(who, card)
+      this.ruleIsDerivedCard(card)
     ) {
       return;
     }
@@ -679,7 +647,7 @@ export class Game {
       [...runtime.usedSkills[1]],
     ];
     usedSkills[who] = [...used, skillId];
-    this.setRuleRuntime({ ...runtime, usedSkills });
+    this.mutator.setRuleRuntime({ ...runtime, usedSkills });
   }
 
   /** 特殊规则「疲劳」：该方本回合已用过的技能费用 +1（上限 +1） */
@@ -1361,17 +1329,9 @@ export class Game {
         this.ruleMoveHandsToDiscard(who);
       }
     }
+    const drawCount = circulation ? CIRCULATION_DRAW_COUNT : 2;
     for (const who of [this.state.currentTurn, flip(this.state.currentTurn)]) {
-      if (!circulation) {
-        const { events } = this.mutator.drawCardsPlain(who, 2);
-        await this.handleEvents(events);
-        continue;
-      }
-      // 洗回逻辑已在 drawCardsPlain 内部逐张处理，这里直接抽即可
-      const { events } = this.mutator.drawCardsPlain(
-        who,
-        CIRCULATION_DRAW_COUNT,
-      );
+      const { events } = this.mutator.drawCardsPlain(who, drawCount);
       await this.handleEvents(events);
     }
     await this.handleEvent("onRoundEnd", new EventArg(this.state));

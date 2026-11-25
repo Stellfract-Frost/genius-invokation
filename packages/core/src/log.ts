@@ -18,6 +18,7 @@ import type { GameState } from "./base/state";
 import type { GameData } from "./data";
 import { CORE_VERSION, StateSymbol } from "./index";
 import type { SkillEnvironment } from "./base/skill";
+import { roomRuleExtensionDefinition } from "./room_rules";
 
 export interface GameStateLogEntry {
   readonly state: GameState;
@@ -172,6 +173,9 @@ function deserializeImpl(
       typeof v.id === "number" &&
       isValidDefKey(v.$$)
     ) {
+      if (v.$$ === "extensions" && v.id === roomRuleExtensionDefinition.id) {
+        return roomRuleExtensionDefinition;
+      }
       return data[v.$$].get(v.id);
     }
     if ("__type" in v) {
@@ -222,8 +226,10 @@ export function deserializeGameStateLog(
       restoredStore,
       entry.s,
     );
+    restoredState.config.roomRules ??= [];
     for (const player of restoredState.players) {
       player[StateSymbol] = "player";
+      player.discard ??= [];
       for (const ch of player.characters) {
         ch[StateSymbol] = "character";
         for (const e of ch.entities) {
@@ -236,6 +242,7 @@ export function deserializeGameStateLog(
         ...player.summons,
         ...player.hands,
         ...player.pile,
+        ...player.discard,
       ]) {
         e[StateSymbol] = "entity";
         for (const att of e.attachments) {

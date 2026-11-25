@@ -40,6 +40,7 @@ export {
   type RoomRuleMeta,
   type RoomRulePolarity,
   ROOM_RULES,
+  RULE_RELATED_DEFINITION_IDS,
   CHAOS_POOL,
   isRoomRuleId,
   roomRuleExtensionDefinition,

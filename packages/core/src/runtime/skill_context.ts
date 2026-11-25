@@ -1899,6 +1899,7 @@ export class SkillContext<Meta extends ContextMetaBase> {
       // 否则，随机选中一张满足条件的牌
       const player = () => this.rawState.players[who];
       for (let i = 0; i < countOrCard; i++) {
+        this.mutator.preparePileForDraw(who);
         const candidates = player().pile.filter(check);
         if (candidates.length === 0) {
           break;

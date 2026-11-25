@@ -158,7 +158,7 @@ deckVersion: "Version",
     "Each round grants a random boon that has not appeared yet; once all boons are used a new cycle begins. Chaos cannot be combined with individual rules.",
   rule_circulation_name: "Circulation",
   rule_circulation_desc:
-    "The deck holds 24 cards and you draw 5 each round. Unplayed hand cards (except Legend) go to the discard pile at round end, and the discard pile is shuffled back when the deck runs out.",
+    "The deck holds 24 cards and you draw 5 each round. Unplayed hand cards (except Legend) go to the discard pile at round end. The discard pile is shuffled back when you empty your deck. In round n, the first time each player draws the last card in their deck, evenly space n − 1 Forbidden Knowledge cards throughout that player's deck.",
   rule_chaos_name: "Chaos",
   rule_chaos_desc:
     "Each round grants a random boon that has not appeared yet; once all boons are used a new cycle begins.",

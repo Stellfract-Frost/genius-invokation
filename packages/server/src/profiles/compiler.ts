@@ -20,6 +20,8 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   CURRENT_VERSION,
+  RULE_RELATED_DEFINITION_IDS,
+  VERSIONS,
   createOfficialVersionResolver,
   getVersionBehavior,
   mergeGameConfigWithDefault,
@@ -57,6 +59,7 @@ const DEFAULT_GAME_CONFIG: ProfileGameConfig = (({
   randomSeed,
   hostWho,
   hostRelatedExecution,
+  roomRules,
   ...config
 }) => config)(mergeGameConfigWithDefault());
 
@@ -89,6 +92,16 @@ export function finishProfile(
 }
 
 export function officialProfile(baseVersion: Version): CompiledProfile {
+  const forbiddenKnowledgeAssetVersion = "v4.7.0";
+  const assetVersion =
+    VERSIONS.indexOf(baseVersion) < VERSIONS.indexOf(forbiddenKnowledgeAssetVersion)
+      ? {
+          $base: baseVersion,
+          $category: baseVersion,
+          [RULE_RELATED_DEFINITION_IDS.forbiddenKnowledge]:
+            forbiddenKnowledgeAssetVersion,
+        }
+      : baseVersion;
   return finishProfile(
     {
       id: `official/${baseVersion}`,
@@ -100,7 +113,7 @@ export function officialProfile(baseVersion: Version): CompiledProfile {
       versionMap: {},
       mods: [],
       assets: {
-        version: baseVersion,
+        version: assetVersion,
         customData: [],
         overrideData: [],
         officialDeckCompatible: true,
@@ -180,19 +193,9 @@ export function customProfile(
     );
   }
   const data = source.resolveData(resolver);
-  // 集所长的字段级覆盖：本体取池内血量最高的版本，充能取池内最低值。
-  // 注意：GameData 里的角色定义是全局共享的，直接改会污染其它 profile，
-  // 因此这里做写时复制：只替换被覆盖的角色，并新建 Map。
-  let patched = data;
+  // GameData 的角色定义由多个配置共享，覆盖时只替换受影响的定义。
+  const characters = new Map(data.characters);
   const ovEntries = Object.entries(options.fieldOverrides ?? {});
-  type RawSkill = {
-    id: number;
-    skillType: string | null;
-    playCost?: PlayCost[];
-    initiativeSkillConfig?: {
-      requiredCost: ReadonlyMap<DiceType, number>;
-    };
-  };
   const diceCostType: Record<number, string> = {
     [DiceType.Void]: "GCG_COST_DICE_VOID",
     [DiceType.Cryo]: "GCG_COST_DICE_CRYO",
@@ -206,91 +209,67 @@ export function customProfile(
     [DiceType.Energy]: "GCG_COST_ENERGY",
     [DiceType.Legend]: "GCG_COST_LEGEND",
   };
-  // 费用覆盖：除了固定规则（如魔偶剑鬼），充能被压低的角色，其爆发费用也要
-  // 跟着降到同一个值，否则会出现「面板 2 充能、大招仍要 3 充能」。
+  const serializePlayCost = (cost: ReadonlyMap<DiceType, number>): PlayCost[] =>
+    [...cost].map(([type, count]) => ({
+      type: diceCostType[type] ?? String(type),
+      count,
+    }));
+  // 固定费用在预设 Mod 中生效。充能上限变化时再调整爆发的实际费用。
   const costOverrides: Record<number, PlayCost[]> = {
     ...PLAYCOST_OVERRIDE,
   };
-  const skillCostPatches = new Map<number, ReadonlyMap<DiceType, number>>();
-  for (const [idStr, ov] of ovEntries) {
-    const maxEnergy = ov.maxEnergy;
-    if (maxEnergy == null) continue;
-    const ch = data.characters.get(Number(idStr)) as unknown as {
-      skills?: RawSkill[];
-    } | null;
-    for (const sk of ch?.skills ?? []) {
-      if (sk.skillType !== "burst" || costOverrides[sk.id]) continue;
-      const requiredCost = sk.initiativeSkillConfig?.requiredCost;
-      const energy = requiredCost?.get(DiceType.Energy);
-      if (!requiredCost || energy === undefined) continue;
-      const nextCost = new Map(requiredCost);
-      nextCost.set(DiceType.Energy, Math.min(energy, maxEnergy));
-      skillCostPatches.set(sk.id, nextCost);
-      costOverrides[sk.id] = [...nextCost].map(([type, count]) => ({
-        type: diceCostType[type] ?? String(type),
-        count,
-      }));
+  for (const [idStr, { hp, maxEnergy }] of ovEntries) {
+    const id = Number(idStr);
+    const character = characters.get(id);
+    if (!character) {
+      continue;
     }
-  }
-  const hasCostOverride =
-    Object.keys(costOverrides).length > 0 || skillCostPatches.size > 0;
-  if (ovEntries.length > 0 || hasCostOverride) {
-    const chars = new Map(data.characters);
-    for (const [idStr, ov] of ovEntries) {
-      const id = Number(idStr);
-      const ch = chars.get(id) as unknown as {
-        varConfigs?: Record<string, { initialValue?: number }>;
-      } | null;
-      const vc = ch?.varConfigs;
-      if (!ch || !vc) continue;
-      const nextVarConfigs = { ...vc };
-      if (ov.maxEnergy != null && vc.maxEnergy) {
-        nextVarConfigs.maxEnergy = {
-          ...vc.maxEnergy,
-          initialValue: ov.maxEnergy,
-        };
-      }
-      if (ov.hp != null && vc.maxHealth) {
-        nextVarConfigs.maxHealth = { ...vc.maxHealth, initialValue: ov.hp };
-      }
-      chars.set(id, { ...(ch as object), varConfigs: nextVarConfigs } as never);
+    const varConfigs = { ...character.varConfigs };
+    if (hp !== undefined) {
+      varConfigs.health = { ...varConfigs.health, initialValue: hp };
+      varConfigs.maxHealth = { ...varConfigs.maxHealth, initialValue: hp };
     }
-    if (hasCostOverride) {
-      for (const [cid, ch] of [...chars]) {
-        const list = (ch as unknown as { skills?: RawSkill[] }).skills;
-        if (
-          !list?.some(
-            (sk) => skillCostPatches.has(sk.id) || PLAYCOST_OVERRIDE[sk.id],
-          )
-        ) {
-          continue;
-        }
-        const nextSkills = list.map((sk) => {
-          const nextCost = skillCostPatches.get(sk.id);
-          if (nextCost) {
-            return {
-              ...sk,
-              initiativeSkillConfig: {
-                ...sk.initiativeSkillConfig,
-                requiredCost: nextCost,
-              },
-            };
-          }
-          if (PLAYCOST_OVERRIDE[sk.id]) {
-            return { ...sk, playCost: PLAYCOST_OVERRIDE[sk.id] };
-          }
-          return sk;
-        });
-        chars.set(cid, { ...(ch as object), skills: nextSkills } as never);
-      }
+    if (maxEnergy === undefined) {
+      characters.set(id, { ...character, varConfigs });
+      continue;
     }
-    patched = { ...data, characters: chars } as typeof data;
+    varConfigs.maxEnergy = { ...varConfigs.maxEnergy, initialValue: maxEnergy };
+    const skills = character.skills.map((skill) => {
+      if (
+        skill.triggerOn !== "initiative" ||
+        skill.skillType !== "burst" ||
+        costOverrides[skill.id]
+      ) {
+        return skill;
+      }
+      const config = skill.initiativeSkillConfig;
+      const energy = config.requiredCost.get(DiceType.Energy);
+      if (energy === undefined) {
+        return skill;
+      }
+      const cappedEnergy = Math.min(energy, maxEnergy);
+      const requiredCost = new Map(config.requiredCost).set(
+        DiceType.Energy,
+        cappedEnergy,
+      );
+      costOverrides[skill.id] = serializePlayCost(requiredCost);
+      return {
+        ...skill,
+        initiativeSkillConfig: {
+          ...config,
+          requiredCost,
+          computed$costSize: config.computed$costSize - energy + cappedEnergy,
+        },
+      };
+    });
+    characters.set(id, { ...character, varConfigs, skills });
   }
   const finalData = {
-    ...patched,
-    entities: new Map(patched.entities),
-    extensions: new Map(patched.extensions),
-    attachments: new Map(patched.attachments),
+    ...data,
+    characters,
+    entities: new Map(data.entities),
+    extensions: new Map(data.extensions),
+    attachments: new Map(data.attachments),
   };
   const {
     version: sourceVersion,
@@ -316,12 +295,7 @@ export function customProfile(
       if (skill && entity !== officialCards.get(id)) {
         // The deck editor reads the base category in bulk. Publish the same
         // costs as the engine so those cards don't inherit the category cost.
-        const playCost: PlayCost[] = [
-          ...skill.initiativeSkillConfig.requiredCost,
-        ].map(([type, count]) => ({
-          type: diceCostType[type] ?? String(type),
-          count,
-        }));
+        const playCost = serializePlayCost(skill.initiativeSkillConfig.requiredCost);
         assetOverrides.set(id, { ...assetOverrides.get(id), id, playCost });
       }
     }

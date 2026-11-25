@@ -46,7 +46,13 @@ import {
   type CreateEntityOptions,
   type InsertEntityOptions,
 } from "./utils";
-import { hasRule, RULE_RELATED_DEFINITION_IDS } from "./room_rules";
+import {
+  getRuleRuntime,
+  hasRule,
+  RULE_EXTENSION_ID,
+  RULE_RELATED_DEFINITION_IDS,
+  type RoomRuleRuntimeState,
+} from "./room_rules";
 import {
   GiTcgCoreInternalError,
   GiTcgDataError,
@@ -991,6 +997,15 @@ export class StateMutator {
       });
       overflowed = true;
     }
+    if (
+      payload.type === "moveEntity" &&
+      payload.reason === "draw" &&
+      payload.from.type === "pile" &&
+      this.state.players[payload.from.who].pile.length === 0 &&
+      hasRule(this.state, "circulation")
+    ) {
+      this.refillCirculationPile(payload.from.who);
+    }
     return [
       [
         "onHandCardInserted",
@@ -1005,6 +1020,42 @@ export class StateMutator {
     ];
   }
 
+  setRuleRuntime(newState: RoomRuleRuntimeState) {
+    if (
+      this.state.extensions.some((ext) => ext.definition.id === RULE_EXTENSION_ID)
+    ) {
+      this.mutate({
+        type: "mutateExtensionState",
+        extensionId: RULE_EXTENSION_ID,
+        newState,
+      });
+    }
+  }
+
+  private refillCirculationPile(who: 0 | 1) {
+    const { roundNumber } = this.state;
+    const runtime = getRuleRuntime(this.state);
+    const refillRounds: [number, number] = [
+      ...(runtime.circulationRefillRounds ?? [0, 0]),
+    ];
+    const extraKnowledge =
+      roundNumber > 1 && refillRounds[who] !== roundNumber ? roundNumber - 1 : 0;
+    if (extraKnowledge > 0) {
+      refillRounds[who] = roundNumber;
+      this.setRuleRuntime({ ...runtime, circulationRefillRounds: refillRounds });
+    }
+    this.reshuffleDiscardIntoPile(who, extraKnowledge);
+  }
+
+  preparePileForDraw(who: 0 | 1) {
+    if (
+      this.state.players[who].pile.length === 0 &&
+      hasRule(this.state, "circulation")
+    ) {
+      this.reshuffleDiscardIntoPile(who);
+    }
+  }
+
   drawCardsPlain(
     who: 0 | 1,
     count: number,
@@ -1012,13 +1063,7 @@ export class StateMutator {
     const cards: EntityState[] = [];
     const events = new EventList();
     for (let i = 0; i < count; i++) {
-      // 「运转」：牌库空了先把弃牌堆洗回来，优先级高于抽牌本身
-      if (
-        this.state.config.roomRules?.includes("circulation") &&
-        this.state.players[who].pile.length === 0
-      ) {
-        this.reshuffleDiscardIntoPile(who);
-      }
+      this.preparePileForDraw(who);
       const card = this.state.players[who].pile[0];
       if (!card) {
         break;
@@ -1083,10 +1128,15 @@ export class StateMutator {
   }
 
   /** 「运转」：把弃牌堆洗回牌库（普通牌随机、禁忌知识均匀） */
-  reshuffleDiscardIntoPile(who: 0 | 1) {
-    const player = this.state.players[who];
-    const cards = [...player.discard];
-    if (cards.length === 0) {
+  private reshuffleDiscardIntoPile(who: 0 | 1, extraKnowledge = 0) {
+    const { pile, discard } = this.state.players[who];
+    const knowledge = this.createForbiddenKnowledgeCards(who, extraKnowledge);
+    const recycleCapacity = Math.max(
+      0,
+      this.state.config.maxPileCount - pile.length - knowledge.length,
+    );
+    const cards = discard.slice(0, recycleCapacity);
+    if (cards.length === 0 && knowledge.length === 0) {
       return;
     }
     const forbiddenId = RULE_RELATED_DEFINITION_IDS.forbiddenKnowledge;
@@ -1098,6 +1148,7 @@ export class StateMutator {
         reason: "reshuffle",
       });
     }
+    // 和原有洗回行为一致，牌重新进入牌库时分配新 ID。
     const payloads = cards.map((card) => ({
       type: "createEntity" as const,
       target: { who, type: "pile" as const, cardId: 0 },
@@ -1109,10 +1160,40 @@ export class StateMutator {
       who,
     );
     this.insertPileCards(
-      payloads.filter((p) => p.value.definition.id === forbiddenId),
+      [
+        ...knowledge,
+        ...payloads.filter((p) => p.value.definition.id === forbiddenId),
+      ],
       "spaceAround",
       who,
     );
+  }
+
+  insertForbiddenKnowledge(who: 0 | 1, count: number) {
+    this.insertPileCards(
+      this.createForbiddenKnowledgeCards(who, count),
+      "spaceAround",
+      who,
+    );
+  }
+
+  private createForbiddenKnowledgeCards(
+    who: 0 | 1,
+    count: number,
+  ): InsertPilePayload[] {
+    if (count <= 0) {
+      return [];
+    }
+    const definition = this.state.data.entities.get(
+      RULE_RELATED_DEFINITION_IDS.forbiddenKnowledge,
+    );
+    return definition
+      ? Array.from({ length: count }, () => ({
+          type: "createEntity" as const,
+          target: { who, type: "pile" as const, cardId: 0 },
+          value: { id: 0, definition, variables: {}, attachments: [] },
+        }))
+      : [];
   }
 
   insertPileCards(

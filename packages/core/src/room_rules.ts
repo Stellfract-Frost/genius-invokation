@@ -32,7 +32,7 @@ import { DEFAULT_VERSION_INFO } from "./base/version";
 export type RoomRuleId =
   /** 混沌：每回合随机一个正面规则，不重复，抽完重开一轮 */
   | "chaos"
-  /** 运转：弃牌堆机制（牌库 24 张、每回合抽 5 张、回合结束弃光手牌、牌库空时洗回弃牌堆） */
+  /** 运转：回合结束弃牌后抽 5 张，抽空牌库时洗回弃牌堆并加入禁忌知识 */
   | "circulation"
   /** 抽牌：对局开始时手牌 7 张 */
   | "extraDraw"
@@ -69,7 +69,7 @@ export const ROOM_RULES: readonly RoomRuleMeta[] = [
     id: "circulation",
     name: "运转",
     description:
-      "牌库变为 24 张，每回合抽 5 张；回合结束时未打出的手牌（秘传除外）进入弃牌堆，牌库抽空时把弃牌堆洗回牌库。",
+      "牌库变为 24 张，每回合抽 5 张。回合结束时，未打出的手牌（秘传除外）进入弃牌堆。牌库抽空时洗回弃牌堆。第 n 回合，每名玩家首次抽空自己的牌库时，额外将（n−1）张「禁忌知识」均匀塞入自己的牌库。",
     polarity: "special",
   },
   {
@@ -224,6 +224,8 @@ export interface RoomRuleRuntimeState {
    * 下标 0/1 对应玩家，回合开始时清空，双方互不影响。
    */
   readonly usedSkills: readonly [readonly number[], readonly number[]];
+  /** 双方上次因「运转」抽空牌库而加入禁忌知识的回合。 */
+  readonly circulationRefillRounds?: readonly [number, number];
 }
 
 const DEFAULT_RUNTIME_STATE: RoomRuleRuntimeState = {
@@ -231,6 +233,7 @@ const DEFAULT_RUNTIME_STATE: RoomRuleRuntimeState = {
   chaosActive: null,
   playedCards: [0, 0],
   usedSkills: [[], []],
+  circulationRefillRounds: [0, 0],
 };
 
 /** 规则状态载体 extension 的保留 id，避开数据层定义 */

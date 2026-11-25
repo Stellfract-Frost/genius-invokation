@@ -26,7 +26,7 @@ import type { modSchema, inlinePluginSchema, presetSchema } from "./schema";
 
 export type ProfileGameConfig = Omit<
   GameConfig,
-  "randomSeed" | "hostWho" | "hostRelatedExecution"
+  "randomSeed" | "hostWho" | "hostRelatedExecution" | "roomRules"
 >;
 export interface ModSource extends z.infer<typeof modSchema> {}
 export interface PluginConfig extends z.output<typeof inlinePluginSchema> {}
