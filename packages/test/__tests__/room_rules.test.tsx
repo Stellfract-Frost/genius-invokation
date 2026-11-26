@@ -26,6 +26,8 @@ import {
   LumenstoneAdjuvant,
   Nre,
 } from "@gi-tcg/data/internal/cards/support/item.gts";
+import { Timaeus } from "@gi-tcg/data/internal/cards/support/ally.gts";
+import { GamblersEarrings } from "@gi-tcg/data/internal/cards/equipment/artifacts.gts";
 import { Ganyu } from "@gi-tcg/data/internal/characters/cryo/ganyu.gts";
 import {
   DivineMarksmanship,
@@ -439,6 +441,77 @@ test("skillFatigue: 未使用过的技能不加价", async () => {
   // 元素战技 3 费，未使用过，按原价
   await c.me.skill(SkywardSonnet);
   expect(c.state.players[0].dice.length).toBe(9);
+});
+
+test("repeatCardCost: 后续同名牌多付 1 骰，双方独立并在下一回合重置", async () => {
+  const c = setup(
+    <State config={{ roomRules: ["repeatCardCost"] }}>
+      <DiceCount my count={8} />
+      <DiceCount opp count={8} />
+      <Character my active def={Venti} />
+      <Character opp active />
+      <Card my def={ChangingShifts} />
+      <Card my def={ChangingShifts} />
+      <Card my def={ChangingShifts} />
+      <Card my def={ChangingShifts} />
+      <Card my def={ChangingShifts} />
+      <Card opp def={ChangingShifts} />
+    </State>,
+  );
+  await c.me.tune(ChangingShifts);
+  await c.me.card(ChangingShifts);
+  expect(c.state.players[0].dice).toHaveLength(8);
+  await c.me.card(ChangingShifts);
+  expect(c.state.players[0].dice).toHaveLength(7);
+  await c.me.card(ChangingShifts);
+  expect(c.state.players[0].dice).toHaveLength(6);
+
+  await c.me.end();
+  await c.opp.card(ChangingShifts);
+  expect(c.state.players[1].dice).toHaveLength(8);
+  await c.opp.end();
+  const dice = c.state.players[0].dice.length;
+  await c.me.card(ChangingShifts);
+  expect(c.state.players[0].dice).toHaveLength(dice);
+});
+
+test("repeatCardCost: 蒂玛乌斯免掉圣遗物费用后，重复出牌仍支付 1 个无色元素骰", async () => {
+  const target = ref();
+  const c = setup(
+    <State config={{ roomRules: ["repeatCardCost"] }}>
+      <DiceCount my count={8} />
+      <Character my active def={Venti} ref={target} />
+      <Character opp active />
+      <Card my def={GamblersEarrings} />
+      <Card my def={Timaeus} />
+      <Card my def={GamblersEarrings} />
+    </State>,
+  );
+  await c.me.card(GamblersEarrings, target);
+  await c.me.card(Timaeus);
+  const dice = c.state.players[0].dice.length;
+  await c.me.card(GamblersEarrings, target);
+  expect(c.state.players[0].dice).toHaveLength(dice - 1);
+});
+
+test("repeatCardCost: 运转洗回并抽到同一张牌后仍按同名计费", async () => {
+  const c = setup(
+    <State config={{ roomRules: ["circulation", "repeatCardCost"] }}>
+      <DiceCount my count={12} />
+      <Character my active def={Venti} />
+      <Character opp active />
+      <Card my def={ChangingShifts} />
+      <Card my def={CountdownToTheShow3} />
+      <Card my def={CountdownToTheShow3} />
+    </State>,
+  );
+  await c.me.card(ChangingShifts);
+  await c.me.card(CountdownToTheShow3);
+  const dice = c.state.players[0].dice.length;
+  await c.me.card(ChangingShifts);
+  expect(c.state.players[0].dice).toHaveLength(dice - 1);
+  await c.me.card(CountdownToTheShow3);
+  expect(c.state.players[0].dice).toHaveLength(dice - 5);
 });
 
 test("forbiddenKnowledge: 禁忌知识均匀分布在牌库中", async () => {

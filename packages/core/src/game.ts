@@ -408,6 +408,7 @@ export class Game {
     let next: RoomRuleRuntimeState = {
       ...runtime,
       playedCards: [0, 0],
+      playedCardDefinitions: [[], []],
       // 「疲劳」按回合重置，双方各自独立
       usedSkills: [[], []],
     };
@@ -521,18 +522,32 @@ export class Game {
     }
   }
 
-  /** 回合内已打出手牌数 +1（束缚规则使用） */
-  private ruleCountPlayedCard(who: 0 | 1) {
-    if (!hasRule(this.state, "restraint")) {
+  private ruleRecordPlayedCard(who: 0 | 1, definitionId: number) {
+    const restraint = hasRule(this.state, "restraint");
+    const repeatCardCost = hasRule(this.state, "repeatCardCost");
+    if (!restraint && !repeatCardCost) {
       return;
     }
     const runtime = getRuleRuntime(this.state);
-    const playedCards: [number, number] = [...runtime.playedCards] as [
-      number,
-      number,
-    ];
-    playedCards[who] += 1;
-    this.mutator.setRuleRuntime({ ...runtime, playedCards });
+    let next = runtime;
+    if (restraint) {
+      const playedCards: [number, number] = [...runtime.playedCards];
+      playedCards[who] += 1;
+      next = { ...next, playedCards };
+    }
+    if (repeatCardCost) {
+      const recorded = runtime.playedCardDefinitions ?? [[], []];
+      if (!recorded[who].includes(definitionId)) {
+        const playedCardDefinitions: [readonly number[], readonly number[]] = [
+          ...recorded,
+        ];
+        playedCardDefinitions[who] = [...recorded[who], definitionId];
+        next = { ...next, playedCardDefinitions };
+      }
+    }
+    if (next !== runtime) {
+      this.mutator.setRuleRuntime(next);
+    }
   }
 
   /**
@@ -1232,8 +1247,7 @@ export class Game {
                 "onPlayCard",
                 new PlayCardEventArg(this.state, actionInfo),
               );
-              // 特殊规则「束缚」：统计本回合打出的手牌数
-              this.ruleCountPlayedCard(who);
+              this.ruleRecordPlayedCard(who, card.definition.id);
               break;
             }
             case "switchActive": {

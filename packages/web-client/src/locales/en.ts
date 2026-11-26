@@ -201,6 +201,9 @@ export default {
   rule_skillFatigue_name: "Fatigue",
   rule_skillFatigue_desc:
     "Within a round, once a skill (including Normal Attack) has been used, using it again costs 1 more die (at most +1). Resets each round and is tracked separately for each player.",
+  rule_repeatCardCost_name: "Encore",
+  rule_repeatCardCost_desc:
+    "Each player tracks the Action Cards they play each round. Playing a card by the same name again that round costs 1 additional unaligned die after other cost effects. The extra cost stays at 1.",
   rule_undercurrent_name: "Undercurrent",
   rule_undercurrent_desc:
     "At the start of every odd-numbered round, both players gain 2 stacks of Curse of the Undercurrent (Elemental Skill/Burst costs 1 more die; 2 usages).",

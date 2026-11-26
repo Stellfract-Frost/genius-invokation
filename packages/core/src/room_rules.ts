@@ -52,6 +52,8 @@ export type RoomRuleId =
   | "doubleHealth"
   /** 疲劳：技能用过一次后费用 +1（上限 +1） */
   | "skillFatigue"
+  /** 重演：本回合重复主动打出同名行动牌额外支付 1 个无色元素骰 */
+  | "repeatCardCost"
   /** 暗流：奇数回合开始双方各获得 2 层「暗流的诅咒」 */
   | "undercurrent"
   /** 束缚：每回合最多打出 7 张手牌 */
@@ -120,6 +122,13 @@ export const ROOM_RULES: readonly RoomRuleMeta[] = [
     name: "疲劳",
     description:
       "本回合内，每个技能（含普通攻击）使用过一次后，再次使用该技能时费用 +1（最多 +1），下回合重置；双方独立计算。",
+    polarity: "debuff",
+  },
+  {
+    id: "repeatCardCost",
+    name: "重演",
+    description:
+      "每回合，双方各自首次主动打出一张行动牌时照常结算。本回合再次主动打出同名牌时，结算其他费用效果后额外支付 1 个无色元素骰（最多 +1）。",
     polarity: "debuff",
   },
   {
@@ -231,6 +240,8 @@ export interface RoomRuleRuntimeState {
   readonly chaosActive: RoomRuleId | null;
   /** 本回合双方已打出的手牌数 */
   readonly playedCards: readonly [number, number];
+  /** 本回合双方各自主动打出过的行动牌定义 id（「重演」规则使用）。 */
+  readonly playedCardDefinitions?: readonly [readonly number[], readonly number[]];
   /**
    * 本回合双方各自已经用过的技能定义 id（「疲劳」规则使用）。
    * 下标 0/1 对应玩家，回合开始时清空，双方互不影响。

@@ -30,7 +30,12 @@ import {
 } from "./base/skill";
 import type { GameState } from "./base/state";
 import { SkillExecutor } from "./skill_executor";
-import { getActiveCharacterIndex, getEntityArea, type Writable } from "./utils";
+import {
+  getActiveCharacterIndex,
+  getEntityArea,
+  normalizeCost,
+  type Writable,
+} from "./utils";
 import { GiTcgIoNotProvideError, GiTcgPreviewAbortedError } from "./error";
 import {
   ActionValidity,
@@ -44,6 +49,7 @@ import { exposeMutation } from "./io";
 import { DetailLogger } from "./log";
 import { getAsyncContextValue } from "./async_context";
 import { StateMutator } from "./mutator";
+import { getRuleRuntime, hasRule } from "./room_rules";
 
 export type ActionInfoWithModification = ActionInfo & {
   eventArg: InstanceType<typeof GenericModifyActionEventArg>;
@@ -278,6 +284,18 @@ export class ActionPreviewer {
     await ctx.precalculateEvent("modifyAction4", eventArgPreCalc);
     const newActionInfo: Writable<WithActionDetail<ActionInfoBase>> =
       eventArgPreCalc.action;
+    if (
+      newActionInfo.type === "playCard" &&
+      hasRule(this.originalState, "repeatCardCost") &&
+      getRuleRuntime(this.originalState).playedCardDefinitions?.[this.who].includes(
+        newActionInfo.skill.caller.definition.id,
+      )
+    ) {
+      // 只在各阶段减费结算后调整玩家实际支付的骰子。
+      const cost = new Map(newActionInfo.cost);
+      cost.set(DiceType.Void, (cost.get(DiceType.Void) ?? 0) + 1);
+      newActionInfo.cost = normalizeCost(cost);
+    }
 
     const player = () => ctx.state.players[this.who];
     const activeCh = () =>

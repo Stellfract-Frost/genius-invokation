@@ -161,31 +161,22 @@ export function checkDice(
   required: ReadonlyDiceRequirement,
   chosen: readonly DiceType[],
 ): boolean {
-  // 如果需要同色骰子
-  if (required.has(ALIGNED)) {
-    const requiredCount = required.get(ALIGNED)!;
-    // 检查个数
-    if (requiredCount !== chosen.length) return false;
-    const chosenMap = new Set<DiceType>(chosen);
-    // 完全同色，或者只有杂色+万能两种骰子
-    return (
-      (chosenMap.size === 0 && requiredCount === 0) ||
-      chosenMap.size === 1 ||
-      (chosenMap.size === 2 && chosenMap.has(OMNI))
-    );
-  }
   const requiredArray = required
     .entries()
     .flatMap(([k, v]) => Array.from({ length: v }, () => k))
     .toArray();
-  // 否则逐个检查杂色/无色
   const chosen2 = [...chosen];
   let voidCount = 0;
+  let alignedCount = 0;
   for (const r of requiredArray) {
     if (r === ENERGY || r === LEGEND) continue;
     // 记录无色的个数，最后检查剩余个数是否一致
     if (r === VOID) {
       voidCount++;
+      continue;
+    }
+    if (r === ALIGNED) {
+      alignedCount++;
       continue;
     }
     // 杂色：找到一个删一个
@@ -198,5 +189,19 @@ export function checkDice(
     }
     chosen2.splice(index, 1);
   }
-  return chosen2.length === voidCount;
+  if (chosen2.length !== voidCount + alignedCount) {
+    return false;
+  }
+  if (alignedCount === 0) {
+    return true;
+  }
+  const counts = new Map<DiceType, number>();
+  for (const type of chosen2) {
+    counts.set(type, (counts.get(type) ?? 0) + 1);
+  }
+  const omniCount = counts.get(OMNI) ?? 0;
+  counts.delete(OMNI);
+  // 满足同色需求后，剩下的骰子支付无色部分。
+  return omniCount >= alignedCount ||
+    counts.values().some((count) => count + omniCount >= alignedCount);
 }

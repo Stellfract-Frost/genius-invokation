@@ -38,7 +38,7 @@
 |---|---|---|
 | 回合开始（roll 阶段前） | `ruleOnRoundBegin` | 抽混沌、重置手牌费用增量、清空疲劳记录、发暗流层数 |
 | 回合结束 | `ruleOnRoundEnd` | 回复规则 |
-| 打出手牌后 | `ruleCountPlayedCard` | 束缚计数 |
+| 打出手牌后 | `ruleRecordPlayedCard` | 束缚与重演计数 |
 | 抽牌时 | `mutator.drawCardsPlain` | 牌库空 → 洗回弃牌堆 |
 
 ### 2.4 规则从房间参数到对局
@@ -66,6 +66,7 @@ const state = InternalGame.createInitialState({
 | `extraDie` | 增费 | buff | 回合开始 +1 万能骰 |
 | `doubleHealth` | 膨胀 | buff | 初始生命上限和当前生命变为原值的 1.5 倍，向下取整 |
 | `skillFatigue` | 疲劳 | debuff | 本回合用过的技能再使用 +1 费，上限 +1，双方独立 |
+| `repeatCardCost` | 重演 | debuff | 本回合再次主动打出同名行动牌，其他费用效果结算后额外支付 1 个无色元素骰，双方独立 |
 | `undercurrent` | 暗流 | debuff | **奇数回合**开始双方各 2 层诅咒 |
 | `restraint` | 束缚 | debuff | 每回合最多打出 7 张手牌 |
 | `noHeal` | 禁疗 | debuff | 治疗量归零（复活除外） |
@@ -265,6 +266,8 @@ corepack pnpm -C packages/test exec vitest run
 3. 验证：`docker compose ps` 看 healthy + `curl -k -H 'Host: xn--7gqx7l00amzd.com' https://127.0.0.1/` 返回 200。
 
 ## 10. 待办与已知边界
+
+- [ ] 试验「整备」。比较每回合双方实际额外抽到的牌数，差距明显时，少抽的一方下回合获得额外元素骰。开局换牌和轮末固定抽牌排除在外。测试时固定「膨胀」开关和先后手，观察付费过牌的回报，以及快攻是否在领先时仍频繁拿到补给，再确定触发差值、骰子种类和上限。
 
 - [ ] 运转中，恰斯卡的追影弹进入弃牌堆时恢复初始状态。可参考幻戏的回炉逻辑，确认染色子弹及临时效果在实际入堆时如何重置，覆盖打出、调和与回合结束的入堆路径。
 - [ ] 弃牌堆用真实卡背图（页面层需要拿到 assets 管理器）
