@@ -38,7 +38,7 @@ import { DEFAULT_VERSION_INFO } from "./base/version";
 export type RoomRuleId =
   /** 混沌：每回合随机一个正面规则，不重复，抽完重开一轮 */
   | "chaos"
-  /** 运转：回合结束弃牌后抽 5 张，抽空牌库时洗回弃牌堆并加入禁忌知识 */
+  /** 运转：回合结束弃牌后抽 5 张，抽空牌库时洗回弃牌堆 */
   | "circulation"
   /** 抽牌：对局开始时手牌 7 张 */
   | "extraDraw"
@@ -61,7 +61,9 @@ export type RoomRuleId =
   /** 禁疗：治疗量归零（复活除外） */
   | "noHeal"
   /** 禁忌：开局在双方牌库中各均匀塞入 6 张「禁忌知识」 */
-  | "forbiddenKnowledge";
+  | "forbiddenKnowledge"
+  /** 透支：每回合第 n 次抽空牌库时，加入（n−1）张「禁忌知识」 */
+  | "overdraw";
 
 export type RoomRulePolarity = "buff" | "debuff" | "special";
 
@@ -77,7 +79,7 @@ export const ROOM_RULES: readonly RoomRuleMeta[] = [
     id: "circulation",
     name: "运转",
     description:
-      "须使用 24 张行动牌的运转牌组。回合结束时，秘传牌和角色衍生牌留在手中，其余手牌进入弃牌堆，然后抽 5 张。每名玩家每回合第 n 次抽空自己的牌库时，先在弃牌堆生成（n−1）张「禁忌知识」，再把弃牌堆洗回牌库，将禁忌知识均匀分布。双方独立计数，每回合重置。",
+      "须使用 24 张行动牌的运转牌组。回合结束时，秘传牌和角色衍生牌留在手中，其余手牌进入弃牌堆，然后抽 5 张。抽空牌库时，立即将弃牌堆洗回牌库。",
     polarity: "special",
   },
   {
@@ -154,6 +156,13 @@ export const ROOM_RULES: readonly RoomRuleMeta[] = [
     id: "forbiddenKnowledge",
     name: "禁忌",
     description: "对局开始时，在双方牌库中各均匀塞入 6 张「禁忌知识」。",
+    polarity: "debuff",
+  },
+  {
+    id: "overdraw",
+    name: "透支",
+    description:
+      "每名玩家每回合第 n 次抽空自己的牌库时，加入（n−1）张「禁忌知识」：第一次 0 张，第二次 1 张，第三次 2 张。普通模式直接加入牌库；运转模式先在弃牌堆生成，再随弃牌堆洗回牌库并均匀分布。双方独立计数，每回合重置。",
     polarity: "debuff",
   },
 ];
@@ -247,8 +256,8 @@ export interface RoomRuleRuntimeState {
    * 下标 0/1 对应玩家，回合开始时清空，双方互不影响。
    */
   readonly usedSkills: readonly [readonly number[], readonly number[]];
-  /** 「运转」中同一回合双方各自抽空牌库的次数。 */
-  readonly circulationRefills?: {
+  /** 「透支」中同一回合双方各自抽空牌库的次数。 */
+  readonly pileDepletions?: {
     readonly roundNumber: number;
     readonly counts: readonly [number, number];
   };

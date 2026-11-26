@@ -26,7 +26,7 @@ import {
   LumenstoneAdjuvant,
   Nre,
 } from "@gi-tcg/data/internal/cards/support/item.gts";
-import { Timaeus } from "@gi-tcg/data/internal/cards/support/ally.gts";
+import { Taroumaru, Timaeus } from "@gi-tcg/data/internal/cards/support/ally.gts";
 import { GamblersEarrings } from "@gi-tcg/data/internal/cards/equipment/artifacts.gts";
 import { Ganyu } from "@gi-tcg/data/internal/characters/cryo/ganyu.gts";
 import {
@@ -628,9 +628,14 @@ test("circulation: 衍生牌在回合结束时保留在手上", async () => {
   expect(hands.some((card) => card.generated)).toBe(true);
 });
 
-test("circulation: 抽牌途中牌库抽空会立刻用弃牌堆补齐", async () => {
+test.each([
+  { overdraw: false, knowledgeInHand: 0, knowledgeInPile: 0 },
+  { overdraw: true, knowledgeInHand: 2, knowledgeInPile: 1 },
+])("circulation: 立即洗回弃牌堆，按需启用透支（$overdraw）", async ({
+  overdraw, knowledgeInHand, knowledgeInPile,
+}) => {
   const c = setup(
-    <State config={{ roomRules: ["circulation"] }}>
+    <State config={{ roomRules: overdraw ? ["circulation", "overdraw"] : ["circulation"] }}>
       <Character my active def={Venti} />
       <Character opp active />
       <Card my def={MondstadtHashBrown} />
@@ -640,23 +645,48 @@ test("circulation: 抽牌途中牌库抽空会立刻用弃牌堆补齐", async (
   );
   await c.me.end();
   await c.opp.end();
-  // 三次抽空依次生成 0、1、2 张禁忌知识。第 5 抽之后正好剩 1 张。
+  // 开启透支时，三次抽空依次生成 0、1、2 张禁忌知识。
   expect(c.state.players[0].hands.map((card) => card.definition.id)).toEqual([
     MondstadtHashBrown,
     MondstadtHashBrown,
     MondstadtHashBrown,
-    ForbiddenKnowledge,
-    ForbiddenKnowledge,
+    ...Array.from({ length: knowledgeInHand }, () => ForbiddenKnowledge),
   ]);
-  expect(c.state.players[0].pile.map((card) => card.definition.id)).toEqual([
-    ForbiddenKnowledge,
-  ]);
+  expect(c.state.players[0].pile.map((card) => card.definition.id)).toEqual(
+    Array.from({ length: knowledgeInPile }, () => ForbiddenKnowledge),
+  );
   expect(c.state.players[0].discard.length).toBe(0);
 });
 
-test("circulation: 第三回合每名玩家首次抽空都生成零张禁忌知识", async () => {
+test("overdraw: 普通模式抽空第二次时直接加入牌库，空抽不累计", async () => {
   const c = setup(
-    <State config={{ roomRules: ["circulation"] }} roundNumber={3}>
+    <State config={{ roomRules: ["overdraw"] }}>
+      <DiceCount my count={12} />
+      <Character my active def={Venti} />
+      <Character opp active />
+      <Card my def={Nre} />
+      <Card my def={Taroumaru} />
+      <Card my def={CountdownToTheShow3} />
+      <Card my def={CountdownToTheShow3} />
+      <Card my pile def={MondstadtHashBrown} />
+    </State>,
+  );
+  await c.me.card(Nre);
+  expect(c.state.players[0].pile).toHaveLength(0);
+  await c.me.card(CountdownToTheShow3);
+  expect(c.state.players[0].pile).toHaveLength(0);
+  await c.me.card(Taroumaru);
+  expect(c.state.players[0].pile).toHaveLength(4);
+  await c.me.card(CountdownToTheShow3);
+  expect(c.state.players[0].pile.map((card) => card.definition.id)).toEqual([
+    ForbiddenKnowledge,
+  ]);
+  expect(c.state.players[0].discard).toHaveLength(0);
+});
+
+test("overdraw: 第三回合每名玩家首次抽空都生成零张禁忌知识", async () => {
+  const c = setup(
+    <State config={{ roomRules: ["circulation", "overdraw"] }} roundNumber={3}>
       <Character my active def={Venti} />
       <Character opp active />
       <Card my pile def={MondstadtHashBrown} />
@@ -715,13 +745,13 @@ test.each([
     expectedPile: [ChangingShifts, ForbiddenKnowledge, ChangingShifts],
     remaining: 0,
   },
-])("circulation: 先在弃牌堆生成禁忌知识再洗回（牌库容量 $maxPileCount）", async ({
+])("overdraw + circulation: 先在弃牌堆生成禁忌知识再洗回（牌库容量 $maxPileCount）", async ({
   maxPileCount, expectedPile, remaining,
 }) => {
   const c = setup(
     <State
       dataVersion="v3.3.0"
-      config={{ roomRules: ["circulation"], maxPileCount }}
+      config={{ roomRules: ["circulation", "overdraw"], maxPileCount }}
       roundNumber={3}
     >
       <Character my active def={Ganyu} />
@@ -769,9 +799,9 @@ test.each([
   ]);
 });
 
-test("circulation: 同一回合逐次增加禁忌知识，双方独立计数并在新回合重置", async () => {
+test("overdraw: 同一回合逐次增加禁忌知识，双方独立计数并在新回合重置", async () => {
   const c = setup(
-    <State config={{ roomRules: ["circulation"] }} roundNumber={2}>
+    <State config={{ roomRules: ["circulation", "overdraw"] }} roundNumber={2}>
       <Character my active def={Venti} />
       <Character opp active />
       <Card my def={CountdownToTheShow3} />
@@ -794,7 +824,7 @@ test("circulation: 同一回合逐次增加禁忌知识，双方独立计数并�
   expect(countKnowledge()).toBe(6);
   const log = serializeGameStateLog([{ state: c.state, canResume: true }]);
   const [restored] = deserializeGameStateLog(c.state.data, log);
-  expect(getRuleRuntime(restored.state).circulationRefills).toEqual({
+  expect(getRuleRuntime(restored.state).pileDepletions).toEqual({
     roundNumber: 2,
     counts: [4, 0],
   });
@@ -809,7 +839,7 @@ test("circulation: 同一回合逐次增加禁忌知识，双方独立计数并�
   await c.opp.end();
   await c.me.end();
   await c.opp.end();
-  expect(getRuleRuntime(c.state).circulationRefills).toEqual({
+  expect(getRuleRuntime(c.state).pileDepletions).toEqual({
     roundNumber: 4,
     counts: [1, 1],
   });

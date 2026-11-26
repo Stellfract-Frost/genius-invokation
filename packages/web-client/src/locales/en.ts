@@ -180,7 +180,7 @@ export default {
     "Each round activates a random boon that can take effect during play. Each boon appears once per cycle. Chaos is used on its own.",
   rule_circulation_name: "Circulation",
   rule_circulation_desc:
-    "Requires a Circulation deck with 24 action cards. At round end, keep Legend and character-generated cards in hand, discard the remaining hand cards, then draw 5. On the nth time each round a player draws the last card of their deck, first create n − 1 Forbidden Knowledge in their discard pile, then shuffle it back into the deck, spacing the Forbidden Knowledge evenly. Each player tracks their own count, which resets every round.",
+    "Requires a Circulation deck with 24 action cards. At round end, keep Legend and character-generated cards in hand, discard the remaining hand cards, then draw 5. When a deck runs out, immediately shuffle its discard pile back into it.",
   rule_chaos_name: "Chaos",
   rule_chaos_desc:
     "Each round activates a random boon that can take effect during play. Each boon appears once per cycle.",
@@ -215,6 +215,9 @@ export default {
   rule_forbiddenKnowledge_name: "Forbidden",
   rule_forbiddenKnowledge_desc:
     "At the start of the game, evenly space 6 Forbidden Knowledge cards throughout each player's deck.",
+  rule_overdraw_name: "Overdraw",
+  rule_overdraw_desc:
+    "When you draw the last card of your deck for the nth time in a round, add n − 1 Forbidden Knowledge cards (0 the first time, 1 the second, 2 the third). In Standard, add them directly to your deck. In Circulation, create them in your discard pile first, then shuffle it back into your deck, spacing the Forbidden Knowledge evenly. Each player tracks their own count, which resets every round.",
   discardPile: "Discard pile",
   roundRulesTitle: "Round {{round}} · Special Rules",
   roundRulesBadge: "Round rules",

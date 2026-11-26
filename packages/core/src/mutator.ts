@@ -1001,10 +1001,16 @@ export class StateMutator {
       payload.type === "moveEntity" &&
       payload.reason === "draw" &&
       payload.from.type === "pile" &&
-      this.state.players[payload.from.who].pile.length === 0 &&
-      hasRule(this.state, "circulation")
+      this.state.players[payload.from.who].pile.length === 0
     ) {
-      this.refillCirculationPile(payload.from.who);
+      const fromWho = payload.from.who;
+      const circulation = hasRule(this.state, "circulation");
+      if (hasRule(this.state, "overdraw")) {
+        this.applyOverdraw(fromWho, circulation);
+      }
+      if (circulation) {
+        this.reshuffleDiscardIntoPile(fromWho);
+      }
     }
     return [
       [
@@ -1032,20 +1038,25 @@ export class StateMutator {
     }
   }
 
-  private refillCirculationPile(who: 0 | 1) {
+  private applyOverdraw(who: 0 | 1, circulation: boolean) {
     const { roundNumber } = this.state;
     const runtime = getRuleRuntime(this.state);
-    const previous = runtime.circulationRefills;
+    const previous = runtime.pileDepletions;
     const counts: [number, number] =
       previous?.roundNumber === roundNumber ? [...previous.counts] : [0, 0];
     const extraKnowledge = counts[who];
     counts[who] += 1;
     this.setRuleRuntime({
       ...runtime,
-      circulationRefills: { roundNumber, counts },
+      pileDepletions: { roundNumber, counts },
     });
 
-    // 新生成的牌放在弃牌堆前面，牌库容量不足时优先洗回。
+    if (!circulation) {
+      this.insertForbiddenKnowledge(who, extraKnowledge);
+      return;
+    }
+
+    // 运转洗回前把新牌放在弃牌堆前面，牌库容量不足时优先洗回。
     for (const card of this.createForbiddenKnowledgeCards(
       who,
       extraKnowledge,
@@ -1053,7 +1064,6 @@ export class StateMutator {
     )) {
       this.mutate({ ...card, targetIndex: 0 });
     }
-    this.reshuffleDiscardIntoPile(who);
   }
 
   preparePileForDraw(who: 0 | 1) {
