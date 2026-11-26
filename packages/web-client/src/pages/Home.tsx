@@ -27,6 +27,8 @@ import { Layout } from "../layouts/Layout";
 import { A, useNavigate } from "@solidjs/router";
 import axios, { AxiosError } from "axios";
 import { DeckBriefInfo } from "../components/DeckBriefInfo";
+import { ALL_DECK_VERSIONS, DeckVersionFilter } from "../components/DeckVersionFilter";
+import { getDeckVersionKey } from "../deckVersions";
 import { RoomDialog } from "../components/RoomDialog";
 import { getErrorMessage, roomCodeToId } from "../utils";
 import { RoomInfo } from "../components/RoomInfo";
@@ -41,6 +43,11 @@ export default function Home() {
   const { status, loading: userLoading, error: userError, logout } = useAuth();
   const navigate = useNavigate();
   const { decks, loading: decksLoading, error: decksError } = useDecks();
+  const [deckVersion, setDeckVersion] = createSignal(ALL_DECK_VERSIONS);
+  const visibleDecks = () => decks().data.filter(
+    (deck) => deckVersion() === ALL_DECK_VERSIONS || getDeckVersionKey(deck.versions) === deckVersion(),
+  );
+  const [settingsOnly, setSettingsOnly] = createSignal(false);
 
   const [roomCodeValid, setRoomCodeValid] = createSignal(false);
   let createRoomDialogEl!: HTMLDialogElement;
@@ -86,6 +93,7 @@ export default function Home() {
       navigate("/decks/new");
       return;
     }
+    setSettingsOnly(false);
     createRoomDialogEl.showModal();
   };
   const joinRoomBySubmitCode = async (e: SubmitEvent) => {
@@ -155,7 +163,7 @@ export default function Home() {
               </div>
               <div class="flex flex-grow flex-col-reverse md:flex-row gap-8 md:gap-0 min-h-0">
                 <div class="h-full w-full md:w-128 flex flex-col items-start md:bottom-opacity-gradient">
-                  <div class="flex flex-row justify-between mb-4 w-full md:pr-6 items-end">
+                  <div class="flex flex-wrap gap-2 justify-between mb-3 w-full md:pr-6 items-center">
                     <A href="/decks" class="text-xl font-bold">
                       {t("myDecks")}
                     </A>
@@ -170,6 +178,7 @@ export default function Home() {
                         {t("manage")}
                       </A>
                     </div>
+                    <DeckVersionFilter decks={decks().data} value={deckVersion()} onChange={setDeckVersion} />
                   </div>
                   <Switch>
                     <Match when={decksLoading()}>
@@ -185,13 +194,17 @@ export default function Home() {
                     <Match when={true}>
                       <div class="grid w-full grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2 md:grid-cols-[repeat(auto-fill,minmax(200px,1fr))] md:gap-3 md:pr-6 md:overflow-y-auto scrollbar-thin-hover">
                         <For
-                          each={decks().data}
+                          each={visibleDecks()}
                           fallback={
                             <div class="text-gray-500">
-                              {t("noDecks")}
-                              <A href="/decks/new" class="text-blue-500">
-                                {t("goAdd")}
-                              </A>
+                              <Show when={decks().count} fallback={
+                                <>
+                                  {t("noDecks")}
+                                  <A href="/decks/new" class="text-blue-500">{t("goAdd")}</A>
+                                </>
+                              }>
+                                {t("noDecksForVersion")}
+                              </Show>
                             </div>
                           }
                         >
@@ -203,7 +216,20 @@ export default function Home() {
                 </div>
                 <div class="b-r-gray-200 b-1 hidden md:block mr-8" />
                 <div class="flex-grow flex flex-col md:min-w-128">
-                  <h4 class="text-xl font-bold mb-5">{t("startGame")}</h4>
+                  <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+                    <h4 class="text-xl font-bold">{t("startGame")}</h4>
+                    <button
+                      type="button"
+                      aria-haspopup="dialog"
+                      class="btn btn-outline h-9"
+                      onClick={() => {
+                        setSettingsOnly(true);
+                        createRoomDialogEl.showModal();
+                      }}
+                    >
+                      {t("roomDefaults")}
+                    </button>
+                  </div>
                   <Show
                     when={!currentRoom()}
                     fallback={
@@ -297,7 +323,7 @@ export default function Home() {
         </Switch>
       </div>
       <Portal>
-        <RoomDialog ref={createRoomDialogEl!} />
+        <RoomDialog ref={createRoomDialogEl!} settingsOnly={settingsOnly()} hostDecks={decks().data} />
         <RoomDialog
           ref={joinRoomDialogEl!}
           joiningRoomInfo={joiningRoomInfo()}

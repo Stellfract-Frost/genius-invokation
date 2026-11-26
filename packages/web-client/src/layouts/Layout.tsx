@@ -21,6 +21,7 @@ import { getErrorMessage } from "../utils";
 
 export interface LayoutProps {
   children?: JSX.Element;
+  fitViewport?: boolean;
 }
 
 function Passthrough(props: { children?: JSX.Element }) {
@@ -31,7 +32,9 @@ export function Layout(props: LayoutProps) {
   return (
     <div class="w-full h-full flex flex-col justify-between">
       <Header />
-      <main class="flex-grow flex-shrink-0 min-h-0 w-full p-4 md:p-8 md:pb-0 mt-12 md:mt-16 md:max-h-[calc(100vh-8.5rem)]">
+      <main class={props.fitViewport
+        ? "flex-1 min-h-80 w-full px-2 pt-2 pb-5 md:px-5 md:pt-4 md:pb-2 mt-12 md:mt-16"
+        : "flex-grow flex-shrink-0 min-h-0 w-full p-4 md:p-8 md:pb-0 mt-12 md:mt-16 md:max-h-[calc(100vh-8.5rem)]"}>
         <Dynamic
           component={import.meta.env.DEV ? Passthrough : ErrorBoundary}
           fallback={(err: Error) => (
@@ -42,7 +45,7 @@ export function Layout(props: LayoutProps) {
         </Dynamic>
       </main>
 
-      <Footer />
+      {props.fitViewport ? <div class="hidden md:block"><Footer /></div> : <Footer />}
     </div>
   );
 }

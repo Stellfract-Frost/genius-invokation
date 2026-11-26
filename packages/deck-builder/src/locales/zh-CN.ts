@@ -16,6 +16,12 @@
 export default {
   characters: "角色牌",
   actionCards: "行动牌",
+  cardPool: "卡池",
+  currentDeck: "已选牌组",
+  cardPages: "卡池分页",
+  previousPage: "上一页",
+  nextPage: "下一页",
+  noMatchingCards: "暂无符合筛选条件的卡牌",
   versionBelow: "当前仅显示 {{version}} 及更低版本",
   filter: "筛选",
   clear: "清除",

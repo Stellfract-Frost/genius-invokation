@@ -95,6 +95,7 @@ export function DeckBuilder(props: DeckBuilderProps) {
 
   const [cardDataViewerOffsetX, setCardDataViewerOffsetX] = createSignal(0);
   const [cardDataViewerOffsetY, setCardDataViewerOffsetY] = createSignal(0);
+  const [showCurrentDeck, setShowCurrentDeck] = createSignal(false);
 
   const [version, setVersion] = createSignal(0);
   const allVersions = () => deckData()?.allVersions;
@@ -157,6 +158,7 @@ export function DeckBuilder(props: DeckBuilderProps) {
           type="checkbox"
           id={deckPageControlId}
           class="deck-page-control"
+          checked={showCurrentDeck()}
           hidden
         />
         <div
@@ -164,6 +166,14 @@ export function DeckBuilder(props: DeckBuilderProps) {
           {...rest}
           onClick={() => hide()}
         >
+          <Show when={showCurrentDeck()}>
+            <div class="@3xl:hidden flex shrink-0 items-center justify-between mb-2">
+              <span class="font-semibold">{t("currentDeck")}</span>
+              <button type="button" class="h-8 rounded-lg b-1 px-2 text-sm" onClick={() => setShowCurrentDeck(false)}>
+                {t("cardPool")}
+              </button>
+            </div>
+          </Show>
           <Switch>
             <Match when={deckData.loading}>
               <div class="flex-grow">{t("loadingCards")}</div>
@@ -181,20 +191,13 @@ export function DeckBuilder(props: DeckBuilderProps) {
                   actionCardLimit={local.actionCardLimit ?? STANDARD_DECK_CARD_COUNT}
                   onChangeDeck={props.onChangeDeck}
                   onSetVersion={setVersion}
+                  onShowDeck={() => setShowCurrentDeck(true)}
                   {...deckData()}
                 />
               )}
             </Match>
           </Switch>
-          <div class="b-r-1 b-b-1 b-gray DP:mt-3 @3xl:mt-0 DP:@3xl:mt-0" />
-          <div class="h-3 w-full @3xl:hidden flex relative DP:mb-2 DP:flex-shrink-0">
-            <label
-              for={deckPageControlId}
-              class="absolute z-10 h-16 w-16 rounded-full b-1 b-white b-t-gray bg-white top-0 right-0 translate-y--15.5%"
-            >
-              <div class="absolute top-3 left-6 h-4 w-4 rounded-lt-1 b-t-3 b-l-3 b-yellow-5 rotate-45 DP:rotate-225 DP:top-2" />
-            </label>
-          </div>
+          <div class="hidden @3xl:block b-r-1 b-gray-300" />
           <Show when={deckData()}>
             {(deckData) => (
               <CurrentDeck

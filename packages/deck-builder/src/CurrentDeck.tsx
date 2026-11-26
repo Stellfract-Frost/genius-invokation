@@ -82,7 +82,7 @@ export function CurrentDeck(props: AllCardsProps) {
     <div
       // the DP:max-h-[calc(100%-25px)] is calculated by subtracting b-t-1 of split line, mt-3 of split line, h-3 of toggle button and mb-2 of toggle button
       class={`relative min-w-0
-        flex flex-col justify-center
+        hidden @3xl:flex DP:flex flex-col justify-start
         w-full @3xl:w-auto DP:w-auto
         flex-shrink-0 @3xl:flex-shrink-1
         DP:flex-1 DP:self-center DP:max-h-[calc(100%-33px)]

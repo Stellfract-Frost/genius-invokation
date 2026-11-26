@@ -27,7 +27,6 @@ import {
 import { makePersisted } from "@solid-primitives/storage";
 import {
   ROOM_RULES,
-  VERSIONS,
   getRoomDeckCardCount,
   type RoomRuleId,
 } from "@gi-tcg/core";
@@ -41,6 +40,7 @@ import { useAuth } from "../auth";
 import { useGuestDecks, useGuestInfo } from "../guest";
 import type { ProfileList, ProfileSummary } from "../profiles";
 import { useI18n } from "../i18n";
+import { getDeckVersionKey, getDeckVersions } from "../deckVersions";
 
 function SelectableDeckInfo(
   props: Pick<DeckInfoProps, "characters" | "name"> &
@@ -87,6 +87,8 @@ function SelectableDeckInfo(
 
 export interface RoomDialogProps {
   ref: HTMLDialogElement;
+  settingsOnly?: boolean;
+  hostDecks?: readonly DeckInfoProps[];
   joiningRoomInfo?: {
     id: number;
     config: TimeConfig & {
@@ -111,10 +113,6 @@ interface TimeConfig {
   roundTotalActionTime: number;
   actionTime: number;
 }
-
-const SPECIAL_RULES = ROOM_RULES.filter(
-  (rule) => rule.polarity === "special",
-);
 
 const BUFF_RULES = ROOM_RULES.filter((rule) => rule.polarity === "buff");
 const DEBUFF_RULES = ROOM_RULES.filter(
@@ -164,6 +162,19 @@ const TIME_CONFIGS: TimeConfig[] = [
   },
 ];
 
+type RoomMode = "standard" | "circulation" | "chaos";
+
+const MIXED_VERSION_PREFIX = "deck-versions:";
+
+const DEFAULT_ROOM_SETTINGS = {
+  version: "",
+  time: 1,
+  isPublic: true,
+  watchable: true,
+  allowGuest: true,
+  rules: [] as RoomRuleId[],
+};
+
 export function RoomDialog(props: RoomDialogProps) {
   const { t } = useI18n();
   const { status } = useAuth();
@@ -175,81 +186,123 @@ export function RoomDialog(props: RoomDialogProps) {
   const closeDialog = () => {
     dialogEl.close();
   };
-  const [savedProfile, setSavedProfile] = makePersisted(
-    createSignal<string | null>(null),
-    { name: "room-profile" },
+  const [defaults, setDefaults] = makePersisted(
+    createSignal(DEFAULT_ROOM_SETTINGS),
+    { name: "room-defaults" },
   );
   const [profiles] = createResource(() =>
     axios.get<ProfileList>("profiles").then(({ data }) => data),
   );
-  const [profile, setProfile] = createSignal<ProfileSummary>();
-  const [timeConfig, setTimeConfig] = createSignal(TIME_CONFIGS[1]);
-  const [isPublic, setIsPublic] = createSignal(true);
-  const [watchable, setWatchable] = createSignal(true);
-  const [allowGuest, setAllowGuest] = createSignal(true);
-  const [selectedRules, setRoomRules] = createSignal<RoomRuleId[]>([]);
+  const legacyProfile = (() => {
+    try {
+      const value = JSON.parse(localStorage.getItem("room-profile") ?? "null");
+      return typeof value === "string" ? value : "";
+    } catch {
+      return "";
+    }
+  })();
+  const [roomVersion, setRoomVersion] = createSignal(defaults().version || legacyProfile);
+  const [timeConfig, setTimeConfig] = createSignal(TIME_CONFIGS[defaults().time] ?? TIME_CONFIGS[1]);
+  const [isPublic, setIsPublic] = createSignal(defaults().isPublic);
+  const [watchable, setWatchable] = createSignal(defaults().watchable);
+  const [allowGuest, setAllowGuest] = createSignal(defaults().allowGuest);
+  const [selectedRules, setRoomRules] = createSignal(defaults().rules);
   const roomRules = () => props.joiningRoomInfo
     ? (props.joiningRoomInfo.config.roomRules ?? [])
     : selectedRules();
   const deckSize = createMemo(() => getRoomDeckCardCount(roomRules()));
-  const [availableDecks, setAvailableDecks] = createSignal<DeckInfoProps[]>([]);
-  const matchingDecks = createMemo(() =>
-    availableDecks().filter((deck) => deck.cards.length === deckSize()),
+  const roomMode = createMemo<RoomMode>(() => roomRules().includes("chaos")
+    ? "chaos" : roomRules().includes("circulation") ? "circulation" : "standard");
+  const selectRoomMode = (mode: RoomMode) => {
+    const effects = roomRules().filter((rule) => rule !== "chaos" && rule !== "circulation");
+    setRoomRules(mode === "chaos" ? ["chaos"] : mode === "circulation" ? ["circulation", ...effects] : effects);
+  };
+  const mixedVersionOptions = createMemo(() => {
+    const versionKeys = new Set((props.hostDecks ?? [])
+      .map((deck) => getDeckVersionKey(deck.versions))
+      .filter((key) => key.includes("+")));
+    if (roomVersion().startsWith(MIXED_VERSION_PREFIX)) {
+      versionKeys.add(roomVersion().slice(MIXED_VERSION_PREFIX.length));
+    }
+    return [...versionKeys].sort();
+  });
+  const mixedVersionKey = () => editable() && roomVersion().startsWith(MIXED_VERSION_PREFIX)
+    ? roomVersion().slice(MIXED_VERSION_PREFIX.length)
+    : "";
+  const [mergedProfile, { refetch: retryMergedProfile }] = createResource(
+    () => editable() && !props.settingsOnly && mixedVersionKey(),
+    (key) => axios.post<ProfileSummary>("profiles/merge", { versions: key.split("+") }).then(({ data }) => data),
   );
+  const profile = createMemo(() => {
+    if (props.joiningRoomInfo) {
+      return props.joiningRoomInfo.config.profile;
+    }
+    if (mixedVersionKey()) {
+      return mergedProfile.state === "ready" ? mergedProfile() : undefined;
+    }
+    const list = profiles();
+    return list?.profiles.find((profile) => profile.id === roomVersion())
+      ?? list?.profiles.find((profile) => profile.id === list.defaultProfileId);
+  });
+  const profileOptions = createMemo(() => profiles()?.profiles
+    .filter((option) => !option.id.startsWith("practice/") || !option.id.includes("#"))
+    .toReversed() ?? []);
+  const selectedVersionOption = () => mixedVersionKey() ? roomVersion() : profile()?.id ?? roomVersion();
+  const [availableDecks, setAvailableDecks] = createSignal<DeckInfoProps[]>([]);
+  const matchingDecks = createMemo(() => availableDecks().filter((deck) => {
+    if (deck.cards.length !== deckSize()) {
+      return false;
+    }
+    if (!editable()) {
+      return true;
+    }
+    const key = getDeckVersionKey(deck.versions);
+    if (mixedVersionKey()) {
+      return key === mixedVersionKey();
+    }
+    const selected = profile();
+    if (key) {
+      return key === selected?.baseVersion;
+    }
+    return selected?.id === profiles()?.defaultProfileId || selected?.id.startsWith("official/") === false;
+  }));
   const [loadingDecks, setLoadingDecks] = createSignal(true);
   const [selectedDeck, setSelectedDeck] = createSignal<number | null>(null);
   const selectedDeckInfo = createMemo(() =>
     matchingDecks().find((deck) => deck.id === selectedDeck()),
   );
-  const deckVersions = createMemo(() => {
-    const versions = selectedDeckInfo()?.versions;
-    return VERSIONS.filter((version) => versions?.includes(version));
-  });
-  const usesDeckVersions = () => editable() && deckVersions().length > 1;
   const [entering, setEntering] = createSignal(false);
   const toggleRule = (id: RoomRuleId) => {
     if (!editable()) {
       return;
     }
     const current = roomRules();
-    if (id === "chaos") {
-      // 混沌与其它规则互斥
-      setRoomRules(current.includes("chaos") ? [] : ["chaos"]);
-      return;
-    }
-    const others = current.filter((rule) => rule !== "chaos");
-    setRoomRules(
-      others.includes(id)
-        ? others.filter((rule) => rule !== id)
-        : [...others, id],
-    );
+    setRoomRules(current.includes(id) ? current.filter((rule) => rule !== id) : [...current, id]);
   };
 
-  createEffect(() => {
-    const list = profiles();
-    if (props.joiningRoomInfo) {
-      setProfile(props.joiningRoomInfo.config.profile);
-    } else {
-      const saved = savedProfile();
-      if (saved && setProfileById(saved)) {
-        void 0;
-      } else if (list) {
-        setProfileById(list.defaultProfileId);
-      }
+  const resetRoomSettings = () => {
+    if (editable()) {
+      const saved = defaults();
+      setRoomVersion(saved.version || legacyProfile);
+      setTimeConfig(TIME_CONFIGS[saved.time] ?? TIME_CONFIGS[1]);
+      setIsPublic(saved.isPublic);
+      setWatchable(saved.watchable);
+      setAllowGuest(saved.allowGuest);
+      setRoomRules(saved.rules);
     }
-  });
-  const setProfileById = (id: string) => {
-    const list = profiles();
-    if (list) {
-      const p = list.profiles.find((p) => p.id === id);
-      if (p) {
-        setProfile(p);
-        return true;
-      }
-    }
-    return false;
   };
 
+  const saveRoomSettings = () => {
+    setDefaults({
+      version: roomVersion() || profile()?.id || "",
+      time: TIME_CONFIGS.indexOf(timeConfig()),
+      isPublic: isPublic(),
+      watchable: watchable(),
+      allowGuest: allowGuest(),
+      rules: roomRules(),
+    });
+    closeDialog();
+  };
 
   const updateAvailableDecks = async (
     profileId: string,
@@ -306,7 +359,7 @@ export function RoomDialog(props: RoomDialogProps) {
 
   createEffect(() => {
     const profileId = profile()?.id;
-    if (profileId) {
+    if (!props.settingsOnly && profileId) {
       const controller = new AbortController();
       onCleanup(() => controller.abort());
       updateAvailableDecks(profileId, deckSize(), controller.signal);
@@ -331,16 +384,13 @@ export function RoomDialog(props: RoomDialogProps) {
       let playerId = id ?? null;
       let response;
       if (typeof roomId === "undefined") {
-        const profileId = usesDeckVersions() ? undefined : currentProfile.id;
-        if (profileId) {
-          setSavedProfile(profileId);
-        }
+        const profileId = mixedVersionKey() ? undefined : currentProfile.id;
         const payload: any = {
           profileId,
           ...timeConfig(),
           private: !isPublic(),
           watchable: watchable(),
-          allowGuest: allowGuest(),
+          allowGuest: type === "guest" || allowGuest(),
           roomRules: roomRules(),
         };
         if (type === "guest") {
@@ -388,272 +438,221 @@ export function RoomDialog(props: RoomDialogProps) {
     }
   };
 
+  const modeName = (mode: RoomMode) => t(mode === "standard" ? "standardMode" : `rule_${mode}_name`);
+
   return (
     <dialog
       ref={(el) => (dialogEl = el) && (props.ref as any)?.(el)}
-      class="max-h-unset max-w-unset h-100dvh w-100dvw overflow-auto pt-[calc(0.75rem+var(--root-padding-top))] md:pt-3 md:m-x-auto md:my-3rem md:h-[calc(100vh-6rem)] md:w-min md:max-h-200 md:rounded-xl md:shadow-xl p-6 scrollbar-hidden"
+      onClose={resetRoomSettings}
+      aria-label={t(props.settingsOnly ? "roomDefaults" : "roomConfig")}
+      class="room-settings-dialog max-h-unset max-w-unset h-100dvh w-100dvw overflow-auto p-3 pt-[calc(0.75rem+var(--root-padding-top))] md:p-5 md:m-auto md:h-auto md:max-h-[90dvh] md:w-[min(56rem,94vw)] md:rounded-xl md:shadow-xl"
     >
-      <div class="flex flex-col md:min-h-full md:h-min w-full gap-5">
-        <h3 class="flex-shrink-0 text-xl font-bold">{t("roomConfig")}</h3>
-        <div
-          class="flex-grow min-h-0 flex flex-col md:flex-row gap-4 data-[disabled=true]:cursor-not-allowed mb-[calc(4.5rem+var(--root-padding-bottom))] md:mb-0"
-          data-disabled={!editable()}
-        >
-          <div class="flex flex-col w-full md:w-130" data-editable={editable()}>
-            <div class="mb-3 flex flex-row gap-4 items-center">
-              <h4 class="text-lg">{t("roomProfile")}</h4>
-              <Show
-                when={usesDeckVersions()}
-                fallback={
-                  <select
-                    class="disabled:pointer-events-none appearance-none"
-                    value={profile()?.id}
-                    onChange={(e) => setProfileById(e.target.value)}
-                    disabled={!editable()}
-                  >
-                    <For
-                      each={
-                        props.joiningRoomInfo
-                          ? [props.joiningRoomInfo.config.profile]
-                          : (profiles()?.profiles ?? [])
-                      }
-                    >
-                      {(profile) => (
-                        <option value={profile.id}>{profile.name}</option>
+      <div class="mx-auto flex flex-col gap-3 max-w-4xl">
+        <h3 class="text-xl font-bold">{t(props.settingsOnly ? "roomDefaults" : "roomConfig")}</h3>
+        <div class="grid min-w-0 gap-3 mb-18 md:mb-0" classList={{ "md:grid-cols-[minmax(0,1fr)_minmax(16rem,1fr)]": !props.settingsOnly }}>
+          <section class="min-w-0 grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-lg bg-slate-50 p-3">
+            <label class="min-w-0 flex flex-col gap-1 text-sm font-semibold">
+              {t("roomVersion")}
+              <select
+                class="w-full min-w-0 border border-slate-300 rounded-md bg-white px-2 h-10 text-sm font-normal"
+                value={selectedVersionOption()}
+                onChange={(event) => {
+                  setSelectedDeck(null);
+                  setRoomVersion(event.currentTarget.value);
+                }}
+                disabled={!editable()}
+              >
+                <Show when={!editable()} fallback={
+                  <>
+                    <For each={profileOptions()}>
+                      {(option) => (
+                        <option value={option.id} selected={option.id === selectedVersionOption()}>{option.name}</option>
                       )}
                     </For>
-                  </select>
-                }
-              >
-                <span class="min-w-0 break-words">
-                  {t("roomProfileFromDeck", {
-                    versions: deckVersions().join(" / "),
-                  })}
-                </span>
-              </Show>
-            </div>
-            <h4 class="text-lg mb-3">{t("thinkingTime")}</h4>
-            <div class="w-full grid grid-cols-[repeat(auto-fill,minmax(100px,1fr))] md:grid-cols-3 gap-2 mb-3 data-[disabled=true]:pointer-events-none">
-              <For
-                each={
-                  props.joiningRoomInfo
-                    ? [props.joiningRoomInfo.config]
-                    : TIME_CONFIGS
-                }
-              >
-                {(config) => (
-                  <div
-                    class="b-1 b-gray-400 rounded-lg p-2 md:p-12px group data-[active=true]:b-slate-500 data-[active=true]:b-2 md:data-[active=true]:p-11px cursor-pointer data-[active=true]:cursor-default select-none transition-colors"
-                    data-active={
-                      !!props.joiningRoomInfo || config === timeConfig()
-                    }
-                    onClick={() => setTimeConfig(config)}
-                  >
-                    <h5 class="font-bold text-gray-400 group-data-[active=true]:text-black transition-colors">
-                      {config.nameKey
-                        ? t(config.nameKey)
-                        : `${config.roundTotalActionTime} + ${config.actionTime}`}
-                    </h5>
-                    <h5 class="text-gray-400 group-data-[active=true]:text-gray-600 transition-colors md:mb-1 font-size-80%">
-                      {config.estimationTime &&
-                        t("estimatedEachRound", {
-                          minutes: config.estimationTime,
-                        })}
-                    </h5>
-                    <ul class="hidden md:block pl-3 list-disc text-gray-400 font-size-80% text-sm group-data-[active=true]:text-slate-500 transition-colors">
-                      <li>
-                        {t("initTotalActionTime", {
-                          seconds: config.initTotalActionTime,
-                        })}
-                      </li>
-                      <li>{t("rerollTime", { seconds: config.rerollTime })}</li>
-                      <li>
-                        {t("roundTotalActionTime", {
-                          seconds: config.roundTotalActionTime,
-                        })}
-                      </li>
-                      <li>{t("actionTime", { seconds: config.actionTime })}</li>
-                    </ul>
-                  </div>
-                )}
-              </For>
-            </div>
-            <div class="mb-3">
-              <h4 class="text-lg mb-1">{t("specialRules")}</h4>
-              <p class="text-xs text-gray-500 mb-2">{t("specialRulesHint")}</p>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
-                <For each={SPECIAL_RULES}>
-                  {(rule) => (
-                    <div
-                      class="b-1 b-gray-400 rounded-lg p-2 select-none transition-colors cursor-pointer hover:bg-yellow-50 data-[active=true]:b-slate-500 data-[active=true]:b-2 data-[disabled=true]:pointer-events-none"
-                      data-active={roomRules().includes(rule.id)}
-                      data-disabled={!editable()}
-                      onClick={() => toggleRule(rule.id)}
-                    >
-                      <h5 class="font-bold text-sm">
-                        {t(`rule_${rule.id}_name`)}
-                      </h5>
-                      <p class="text-xs text-gray-500 leading-snug">
-                        {t(`rule_${rule.id}_desc`)}
-                      </p>
-                    </div>
-                  )}
-                </For>
-              </div>
-              <h5 class="text-sm font-bold text-gray-500 mb-1">
-                {t("specialRulesBuff")}
-              </h5>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
-                <For each={BUFF_RULES}>
-                  {(rule) => (
-                    <div
-                      class="b-1 b-gray-400 rounded-lg p-2 select-none transition-colors cursor-pointer hover:bg-yellow-50 data-[active=true]:b-slate-500 data-[active=true]:b-2 data-[disabled=true]:pointer-events-none"
-                      data-active={roomRules().includes(rule.id)}
-                      data-disabled={!editable()}
-                      onClick={() => toggleRule(rule.id)}
-                    >
-                      <h5 class="font-bold text-sm">
-                        {t(`rule_${rule.id}_name`)}
-                      </h5>
-                      <p class="text-xs text-gray-500 leading-snug">
-                        {t(`rule_${rule.id}_desc`)}
-                      </p>
-                    </div>
-                  )}
-                </For>
-              </div>
-              <h5 class="text-sm font-bold text-gray-500 mb-1">
-                {t("specialRulesDebuff")}
-              </h5>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
-                <For each={DEBUFF_RULES}>
-                  {(rule) => (
-                    <div
-                      class="b-1 b-gray-400 rounded-lg p-2 select-none transition-colors cursor-pointer hover:bg-yellow-50 data-[active=true]:b-slate-500 data-[active=true]:b-2 data-[disabled=true]:pointer-events-none"
-                      data-active={roomRules().includes(rule.id)}
-                      data-disabled={!editable()}
-                      onClick={() => toggleRule(rule.id)}
-                    >
-                      <h5 class="font-bold text-sm">
-                        {t(`rule_${rule.id}_name`)}
-                      </h5>
-                      <p class="text-xs text-gray-500 leading-snug">
-                        {t(`rule_${rule.id}_desc`)}
-                      </p>
-                    </div>
-                  )}
-                </For>
-              </div>
-            </div>
-            <div class="mb-3 flex flex-row gap-4 items-center">
-              <h4 class="text-lg">{t("publicRoom")}</h4>
-              <ToggleSwitch
-                checked={
-                  props.joiningRoomInfo
-                    ? !props.joiningRoomInfo.config.private
-                    : isPublic()
-                }
-                onChange={(e) => setIsPublic(e.target.checked)}
+                    <For each={mixedVersionOptions()}>
+                      {(key) => (
+                        <option
+                          value={MIXED_VERSION_PREFIX + key}
+                          selected={MIXED_VERSION_PREFIX + key === selectedVersionOption()}
+                        >
+                          {key.replaceAll("+", " / ")}
+                        </option>
+                      )}
+                    </For>
+                  </>
+                }>
+                  <option value={profile()?.id}>{profile()?.name}</option>
+                </Show>
+              </select>
+            </label>
+            <label class="flex flex-col gap-1 text-sm font-semibold">
+              {t("roomGameMode")}
+              <select
+                class="border border-slate-300 rounded-md bg-white px-2 h-10 text-sm font-normal"
+                value={roomMode()}
+                onChange={(event) => selectRoomMode(event.currentTarget.value as RoomMode)}
                 disabled={!editable()}
-              />
-            </div>
-            <div class="mb-3 flex flex-row gap-4 items-center">
-              <h4 class="text-lg">{t("watchable")}</h4>
-              <ToggleSwitch
-                checked={props.joiningRoomInfo?.config.watchable ?? watchable()}
-                onChange={(e) => setWatchable(e.target.checked)}
-                disabled={!editable()}
-              />
-            </div>
-            <Show when={editable() && !guestInfo()}>
-              <div class="mb-3 flex flex-row gap-4 items-center">
-                <h4 class="text-lg">{t("allowGuestJoin")}</h4>
-                <ToggleSwitch
-                  checked={allowGuest()}
-                  onChange={(e) => setAllowGuest(e.target.checked)}
-                />
-              </div>
+              >
+                <For each={["standard", "circulation", "chaos"] as const}>
+                  {(mode) => <option value={mode}>{modeName(mode)}</option>}
+                </For>
+              </select>
+            </label>
+            <Show when={roomMode() !== "standard"}>
+              <p class="col-span-2 text-xs text-slate-600 leading-normal">{t(`rule_${roomMode() as "circulation" | "chaos"}_desc`)}</p>
             </Show>
-            <Show when={editable() ? allowGuest() : guestInfo()}>
-              <div class="mb-3 alert alert-border-warning">
-                <p class="alert-description break-all">
+          </section>
+          <Show when={!props.settingsOnly}>
+            <section class="min-w-0 md:col-start-2 md:row-start-1 md:row-span-2">
+              <h4 class="text-base font-semibold mb-2">{t("chooseDeck")}</h4>
+              <Show when={mixedVersionKey() && mergedProfile.error}>
+                <p role="alert" class="text-sm text-red-700">
+                  {t("deckVersionLoadFailed")}
+                  <button type="button" class="ml-2 underline" onClick={() => void retryMergedProfile()}>{t("retry")}</button>
+                </p>
+              </Show>
+              <Show when={!(mixedVersionKey() && mergedProfile.error)}>
+                <Show when={profile() && !loadingDecks()} fallback={<p role="status" class="text-sm text-slate-600">{t("loading")}</p>}>
+                <ul class="grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-2 max-h-65dvh overflow-auto p-1">
+                  <For each={matchingDecks()} fallback={
+                    <li class="col-span-full text-sm text-slate-600">
+                      {t(deckSize() === CIRCULATION_DECK_CARD_COUNT ? "noCirculationDeckForProfile" : "noDeckForProfile")}
+                    </li>
+                  }>
+                    {(deck) => (
+                      <li>
+                        <SelectableDeckInfo
+                          characters={deck.characters}
+                          name={deck.name}
+                          checked={selectedDeck() === deck.id}
+                          onChange={(event) => event.currentTarget.checked && setSelectedDeck(deck.id)}
+                        />
+                      </li>
+                    )}
+                  </For>
+                </ul>
+                </Show>
+              </Show>
+            </section>
+          </Show>
+          <div class="min-w-0 flex flex-col gap-2">
+            <Show when={roomMode() !== "chaos"}>
+              <details class="rounded-lg border border-slate-200 px-3 py-2" open={props.settingsOnly}>
+                <summary class="cursor-pointer font-semibold">
+                  {t("roomEffects")}
+                  <Show when={roomRules().some((rule) => rule !== "circulation")}>
+                    <span class="ml-2 text-sm text-slate-600">({roomRules().filter((rule) => rule !== "circulation").length})</span>
+                  </Show>
+                </summary>
+                <For each={[
+                  { label: t("specialRulesBuff"), rules: BUFF_RULES },
+                  { label: t("specialRulesDebuff"), rules: DEBUFF_RULES },
+                ]}>
+                  {(group) => (
+                    <>
+                      <h5 class="mt-3 mb-1 text-sm font-semibold text-slate-700">{group.label}</h5>
+                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                        <For each={group.rules}>
+                          {(rule) => (
+                            <button
+                              type="button"
+                              class="rounded-lg border border-slate-200 p-2 text-left aria-pressed:border-blue-500 aria-pressed:bg-blue-50"
+                              aria-pressed={roomRules().includes(rule.id)}
+                              disabled={!editable()}
+                              onClick={() => toggleRule(rule.id)}
+                            >
+                              <span class="block font-semibold text-sm">{t(`rule_${rule.id}_name`)}</span>
+                              <span class="block text-xs text-slate-600">{t(`rule_${rule.id}_desc`)}</span>
+                            </button>
+                          )}
+                        </For>
+                      </div>
+                    </>
+                  )}
+                </For>
+              </details>
+            </Show>
+            <details class="rounded-lg border border-slate-200 px-3 py-2" open={props.settingsOnly}>
+              <summary class="cursor-pointer font-semibold">{t("roomAdvancedSettings")}</summary>
+              <label class="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                {t("thinkingTime")}
+                <Show when={editable()} fallback={
+                  <span>{props.joiningRoomInfo?.config.roundTotalActionTime} + {props.joiningRoomInfo?.config.actionTime}</span>
+                }>
+                  <select
+                    class="h-9 px-2 border border-slate-300 rounded-md"
+                    value={TIME_CONFIGS.indexOf(timeConfig())}
+                    onChange={(event) => setTimeConfig(TIME_CONFIGS[Number(event.currentTarget.value)])}
+                  >
+                    <For each={TIME_CONFIGS}>
+                      {(config, index) => <option value={index()}>{t(config.nameKey!)}</option>}
+                    </For>
+                  </select>
+                </Show>
+              </label>
+              <div class="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-600">
+                <span>{t("initTotalActionTime", { seconds: (props.joiningRoomInfo?.config ?? timeConfig()).initTotalActionTime })}</span>
+                <span>{t("rerollTime", { seconds: (props.joiningRoomInfo?.config ?? timeConfig()).rerollTime })}</span>
+                <span>{t("roundTotalActionTime", { seconds: (props.joiningRoomInfo?.config ?? timeConfig()).roundTotalActionTime })}</span>
+                <span>{t("actionTime", { seconds: (props.joiningRoomInfo?.config ?? timeConfig()).actionTime })}</span>
+              </div>
+              <div class="mt-3 flex flex-wrap gap-x-4 gap-y-2">
+                <div class="flex items-center gap-1.5 text-sm">
+                  {t("publicRoom")}
+                  <ToggleSwitch
+                    aria-label={t("publicRoom")}
+                    checked={props.joiningRoomInfo ? !props.joiningRoomInfo.config.private : isPublic()}
+                    onChange={(event) => setIsPublic(event.currentTarget.checked)}
+                    disabled={!editable()}
+                  />
+                </div>
+                <div class="flex items-center gap-1.5 text-sm">
+                  {t("watchable")}
+                  <ToggleSwitch
+                    aria-label={t("watchable")}
+                    checked={props.joiningRoomInfo?.config.watchable ?? watchable()}
+                    onChange={(event) => setWatchable(event.currentTarget.checked)}
+                    disabled={!editable()}
+                  />
+                </div>
+                <Show when={editable() && !guestInfo()}>
+                  <div class="flex items-center gap-1.5 text-sm">
+                    {t("allowGuestJoin")}
+                    <ToggleSwitch aria-label={t("allowGuestJoin")} checked={allowGuest()} onChange={(event) => setAllowGuest(event.currentTarget.checked)} />
+                  </div>
+                </Show>
+              </div>
+              <Show when={guestInfo() || (editable() && allowGuest())}>
+                <p class="mt-2 text-xs text-slate-600">
                   {t("guestRecordWarning", {
-                    suggestion:
-                      editable() && !guestInfo()
-                        ? t("disableGuestJoin")
-                        : t("useGithubLogin"),
+                    suggestion: editable() && !guestInfo() ? t("disableGuestJoin") : t("useGithubLogin"),
                   })}
                 </p>
-              </div>
-            </Show>
-          </div>
-          <div class="b-r-gray-200 b-1" />
-          <div class="flex flex-col min-w-52 relative">
-            <h4 class="text-lg mb-3">{t("chooseDeck")}</h4>
-            <ul class="grid w-full grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2 md:grid-cols-1 min-h-0 max-h-75dvh md:max-h-155 overflow-auto scrollbar-thin-hover">
-              <For
-                each={matchingDecks()}
-                fallback={
-                  <li class="text-gray-500">
-                    {deckSize() === CIRCULATION_DECK_CARD_COUNT
-                      ? t("noCirculationDeckForProfile")
-                      : t("noDeckForProfile")}
-                  </li>
-                }
-              >
-                {(deck) => (
-                  <li>
-                    <SelectableDeckInfo
-                      characters={deck.characters}
-                      name={deck.name}
-                      checked={selectedDeck() === deck.id}
-                      onChange={(e) =>
-                        e.target.checked && setSelectedDeck(deck.id)
-                      }
-                    />
-                  </li>
-                )}
-              </For>
-            </ul>
-            <div
-              class="absolute inset-0 opacity-0 bg-white text-gray-500 pointer-events-none data-[loading=true]:opacity-80 transition flex items-center justify-center"
-              data-loading={loadingDecks()}
-            >
-              {t("loadingEllipsis")}
-            </div>
+              </Show>
+            </details>
           </div>
         </div>
-        <div class="fixed md:static left-0 right-0 bottom-0 bg-white b-t-gray-200 b-1 md:b-0 px-6 pb-[var(--root-padding-bottom)] h-[calc(4.5rem+var(--root-padding-bottom))] md:h-min md:p-0 flex-shrink-0 flex flex-row justify-end items-center gap-4">
-          <button class="btn btn-ghost-red" onClick={closeDialog}>
+        <div class="fixed md:static left-0 right-0 bottom-0 bg-white border-t md:border-0 border-slate-200 px-3 pt-2 pb-[calc(0.5rem+var(--root-padding-bottom))] md:p-0 flex justify-end gap-2">
+          <button type="button" class="btn btn-ghost-red min-h-10" onClick={closeDialog}>
             {t("cancel")}
           </button>
-          <button
-            class="btn btn-solid-green"
-            onClick={enterRoom}
-            disabled={
-              !selectedDeckInfo() ||
-              entering() ||
-              loadingDecks() ||
-              !profile()
-            }
-          >
-            {!selectedDeckInfo()
-              ? t("selectDeckFirst")
-              : entering()
-                ? t("joiningRoom")
-                : editable()
-                  ? t("createRoomPlain")
-                  : t("joinRoomPlain")}
-          </button>
+          <Show when={props.settingsOnly} fallback={
+            <button
+              type="button"
+              class="btn btn-solid-green min-h-10"
+              onClick={enterRoom}
+              disabled={!selectedDeckInfo() || entering() || loadingDecks() || !profile()}
+            >
+              {entering() ? t("joiningRoom") : !selectedDeckInfo() ? t("selectDeckFirst")
+                : editable() ? t("createRoomPlain") : t("joinRoomPlain")}
+            </button>
+          }>
+            <button type="button" class="btn btn-solid-green min-h-10" onClick={saveRoomSettings}>
+              {t("saveRoomDefaults")}
+            </button>
+          </Show>
         </div>
       </div>
-      <button
-        autofocus
-        class="hidden md:block absolute right-4 top-4 h-5 w-5 text-black bg-transparent"
-        onClick={closeDialog}
-      >
-        <i class="inline-block h-full w-full i-mdi-window-close" />
-      </button>
     </dialog>
   );
 }

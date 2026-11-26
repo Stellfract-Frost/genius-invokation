@@ -54,6 +54,11 @@ dialog:not([open]) {
   transform: scale(0.5);
 }
 
+dialog.deck-editor-dialog:not([open]),
+dialog.room-settings-dialog:not([open]) {
+  display: none;
+}
+
 dialog[open] {
   transform: none;
 }

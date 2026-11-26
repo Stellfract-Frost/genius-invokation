@@ -99,7 +99,7 @@ export function PoolCard(props: PoolCardProps) {
   const { t } = useDeckBuilderContext();
   return (
     <div
-      class="pool-card w-full rounded-lg overflow-clip b-[var(--border-color)] b-2 relative"
+      class="pool-card w-full aspect-[7/12] rounded-lg overflow-clip b-[var(--border-color)] b-2 relative"
       bool:data-selected={props.selected}
       bool:data-partial-selected={props.partialSelected}
       bool:data-invalid={props.valid === false}

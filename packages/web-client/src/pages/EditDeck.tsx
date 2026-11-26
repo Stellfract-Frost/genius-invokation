@@ -22,7 +22,7 @@ import {
   For,
   createEffect,
   onCleanup,
-  onMount,
+  type Accessor,
 } from "solid-js";
 import { VERSIONS } from "@gi-tcg/core";
 import {
@@ -39,7 +39,7 @@ import {
   type DeckCardCount,
 } from "@gi-tcg/typings";
 import { DEFAULT_ASSETS_MANAGER } from "@gi-tcg/assets-manager";
-import { useParams, useSearchParams } from "@solidjs/router";
+import { useNavigate, useParams, useSearchParams } from "@solidjs/router";
 import { DeckBuilder } from "@gi-tcg/deck-builder";
 import "@gi-tcg/deck-builder/style.css";
 import { useGuestDecks } from "../guest";
@@ -49,47 +49,57 @@ import { unwrap } from "solid-js/store";
 import { copyShareCode, getErrorMessage } from "../utils";
 import { useI18n } from "../i18n";
 import { TextFieldEdit } from "../components/TextFieldEdit";
-import { AutoResizeText } from "@gi-tcg/web-ui-core";
+import { getDeckVersions } from "../deckVersions";
+
+function VersionOptions(props: {
+  versions: Accessor<readonly string[]>;
+  onChange: (versions: string[]) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <>
+      <button type="button" class="text-sm underline p-1" onClick={() => props.onChange([])}>
+        {t("deckVersionDefault")}
+      </button>
+      <div class="grid grid-cols-4 lg:grid-cols-1 gap-1">
+        <For each={VERSIONS.toReversed()}>
+          {(version) => (
+            <button
+              type="button"
+              class="min-h-9 rounded-md border border-slate-200 px-1 text-sm tabular-nums aria-pressed:border-blue-500 aria-pressed:bg-blue-100 aria-pressed:font-semibold"
+              aria-pressed={props.versions().includes(version)}
+              onClick={() => props.onChange(props.versions().includes(version)
+                ? props.versions().filter((selected) => selected !== version)
+                : [...props.versions(), version])}
+            >
+              {version}
+            </button>
+          )}
+        </For>
+      </div>
+    </>
+  );
+}
 
 export default function EditDeck() {
   const { t, locale, assetsManager } = useI18n();
   const params = useParams();
   const { status } = useAuth();
   const [guestDecks, { addGuestDeck, updateGuestDeck }] = useGuestDecks();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const isNew = params.id === "new";
   const deckId = Number(params.id);
   const [deckName, setDeckName] = createSignal<string>(
     searchParams.name ?? t("newDeck"),
   );
-  // 版本预览：可多选，按合并后的卡池渲染
   const [previewVersions, setPreviewVersions] = createSignal<string[]>([]);
-  const [previewProfile, setPreviewProfile] = createSignal<ProfileSummary | null>(null);
+  const [draftVersions, setDraftVersions] = createSignal<string[]>([]);
   const [previewSingle, setPreviewSingle] = createSignal<string | null>(null);
   const [previewDetail, setPreviewDetail] = createSignal<ProfileDetail | null>(null);
   const [previewState, setPreviewState] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
-  // 版本随牌组记忆：同一牌组再次打开时回填
-  const versionKey = () => `deck-versions:${params.id ?? "new"}`;
-  let versionsLoaded = false;
-
-  // 新牌组保存后，把版本从 "new" 迁移到真实牌组 id，否则再打开就丢了
-  const migrateVersionStorage = (toId?: number) => {
-    if (!toId) return;
-    try {
-      const raw = localStorage.getItem("deck-versions:new");
-      if (raw) {
-        localStorage.setItem(`deck-versions:${toId}`, raw);
-        localStorage.removeItem("deck-versions:new");
-      }
-    } catch {
-      /* ignore */
-    }
-  };
-
-  const togglePreviewVersion = (v: string) => {
-    const cur = previewVersions();
-    setPreviewVersions(cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v]);
-  };
+  let versionDialog!: HTMLDialogElement;
+  let leaveDialog!: HTMLDialogElement;
   const [uploading, setUploading] = createSignal(false);
   const [uploadDone, setUploadDone] = createSignal(false);
   const [deckValue, setDeckValue] = createSignal<Deck>({
@@ -108,21 +118,9 @@ export default function EditDeck() {
   );
   let deckLoaded = false;
 
-  onMount(() => {
-    try {
-      const raw = localStorage.getItem(versionKey());
-      if (raw) setPreviewVersions(JSON.parse(raw));
-    } catch {
-      /* ignore */
-    }
-    versionsLoaded = true;
-  });
-
   createEffect(() => {
     const vs = previewVersions();
-    if (!versionsLoaded) return;
     if (vs.length === 0) {
-      setPreviewProfile(null);
       setPreviewSingle(null);
       setPreviewDetail(null);
       setPreviewState("idle");
@@ -130,7 +128,6 @@ export default function EditDeck() {
     }
     // 单选 = 普通（直接用该版本的数据）；多选 = 比赛版本（合并卡池）
     if (vs.length === 1) {
-      setPreviewProfile(null);
       setPreviewDetail(null);
       setPreviewSingle(vs[0]);
       setPreviewState("ready");
@@ -150,7 +147,6 @@ export default function EditDeck() {
         if (request.signal.aborted) {
           return;
         }
-        setPreviewProfile(data);
         setPreviewDetail(detail);
         setPreviewState("ready");
       } catch {
@@ -163,16 +159,6 @@ export default function EditDeck() {
       clearTimeout(timer);
       request.abort();
     });
-  });
-
-  createEffect(() => {
-    const vs = previewVersions();
-    if (!versionsLoaded) return;
-    try {
-      localStorage.setItem(versionKey(), JSON.stringify(vs));
-    } catch {
-      /* ignore */
-    }
   });
 
   createEffect(() => {
@@ -192,44 +178,43 @@ export default function EditDeck() {
       deckLoaded = true;
       setDeck(unwrap(deckInfo));
       setDeckName(deckInfo.name);
-      // 服务端空数组不能覆盖本地已选版本：它可能只是"上次保存时还没选版本"，
-      // 而本地记录的是用户随后选过、但尚未保存的版本。
-      const savedVersions = deckInfo.versions?.filter(
-        (version) => VERSIONS.includes(version as never),
-      );
-      if (savedVersions && savedVersions.length > 0) {
-        setPreviewVersions(savedVersions);
+      let versions = deckInfo.versions;
+      if (versions == null) {
+        try {
+          const legacy = JSON.parse(localStorage.getItem(`deck-versions:${deckId}`) ?? "null");
+          if (Array.isArray(legacy)) {
+            versions = legacy;
+          }
+        } catch {
+          // A legacy local preference is optional.
+        }
       }
-      setSearchParams({ name: null }, { replace: true });
+      setPreviewVersions(getDeckVersions(versions));
     }
   });
 
   const [dirty, setDirty] = createSignal(false);
-
-  // useBeforeLeave(async (e) => {
-  //   if (dirty()) {
-  //     e.preventDefault();
-  //     if (window.confirm("您有未保存的更改，是否保存？")) {
-  //       await saveDeck();
-  //     }
-  //     e.retry(true);
-  //   }
-  // });
-  const navigateBack = async () => {
-    if (dirty()) {
-      if (window.confirm(t("unsavedChangesConfirm"))) {
-        if (!await saveDeck()) {
-          return;
-        }
-      }
+  const changeVersions = (versions: string[]) => {
+    const selected = getDeckVersions(versions);
+    if (selected.join() !== previewVersions().join()) {
+      setDirty(true);
+      setPreviewVersions(selected);
     }
-    history.back();
+  };
+  const leave = () => navigate("/decks", { replace: true });
+  const navigateBack = () => {
+    if (dirty() && (!isNew || deckValue().characters.length + deckValue().cards.length > 0)) {
+      leaveDialog.showModal();
+    } else {
+      leave();
+    }
   };
 
   const valid = () => {
     const deck = deckValue();
     return deck.characters.length === 3 && deck.cards.length === deckSize();
   };
+  const canSave = () => valid() && previewState() !== "loading" && previewState() !== "error" && !uploading();
 
   const importCode = () => {
     const input = window.prompt(t("inputShareCode"));
@@ -288,7 +273,7 @@ export default function EditDeck() {
   };
 
   const saveDeck = async () => {
-    if (!valid() || uploading()) {
+    if (!canSave()) {
       return false;
     }
     const deckInfo = {
@@ -301,11 +286,9 @@ export default function EditDeck() {
       setUploading(true);
       if (isNew) {
         if (type === "guest") {
-          const created = await addGuestDeck(deckInfo);
-          migrateVersionStorage(created.id);
+          await addGuestDeck(deckInfo);
         } else if (type === "user") {
-          const res = await axios.post<{ id: number }>("decks", deckInfo);
-          migrateVersionStorage(res.data.id);
+          await axios.post("decks", deckInfo);
         }
         setDirty(false);
       } else {
@@ -330,154 +313,151 @@ export default function EditDeck() {
     }
   };
 
+  const selectedVersions = () => previewVersions().length
+    ? previewVersions().join(" / ")
+    : t("deckVersionDefault");
+
   return (
-    <Layout>
-      <div class="container mx-auto h-full flex flex-col px-2 @container">
-        <div class="flex flex-row flex-wrap items-center gap-1 md:gap-3 mb-3 md:mb-5 min-h-0">
+    <Layout fitViewport>
+      <div class="mx-auto h-full max-w-screen-2xl flex flex-col gap-2">
+        <div class="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1">
           <TextFieldEdit
             value={deckName()}
             saveText={t("save")}
             cancelText={t("cancel")}
-            class="text-xl md:text-2xl font-bold "
+            class="text-lg md:text-2xl font-bold"
             onSave={saveName}
           />
-          <div class="flex flex-row flex-1 gap-1 md:gap-3 text-3.2 md:text-3.5">
-            <button class="btn btn-outline-blue" onClick={importCode}>
+          <div class="flex flex-wrap gap-1.5 text-xs sm:text-sm">
+            <button type="button" class="btn btn-outline-blue min-h-8" onClick={importCode} disabled={uploading()}>
               {t("importShareCode")}
             </button>
-            <button class="btn btn-outline" onClick={exportCode} disabled={!valid()}>
+            <button type="button" class="btn btn-outline min-h-8" onClick={exportCode} disabled={!valid() || uploading()}>
               {t("generateShareCode")}
             </button>
             <button
-              class="flex-shrink-0 btn btn-solid-green min-w-15 md:min-w-22 max-w-20% py-0 px-1"
-              disabled={!valid() || uploading()}
+              type="button"
+              class="btn btn-solid-green min-h-8"
+              disabled={!canSave()}
               onClick={async () => {
-                if (await saveDeck()) {
-                  if (isNew) {
-                    navigateBack();
-                  }
+                if (await saveDeck() && isNew) {
+                  leave();
                 }
               }}
             >
-              <Switch>
-                <Match when={uploading()}>
-                  <i class="i-mdi-loading animate-spin" />
-                </Match>
-                <Match when={uploadDone()}>
-                  <i class="i-mdi-check" />
-                </Match>
-                <Match when={true}>
-                  <AutoResizeText minFontSize={10}>
-                    {t("saveDeck")}
-                  </AutoResizeText>
-                </Match>
-              </Switch>
+              {uploading() ? t("loading") : uploadDone() ? t("deckSaved") : t("saveDeck")}
             </button>
-            <span class="flex-grow" />
-            <button
-              class="flex-shrink-0 btn btn-outline-red min-w-15 max-w-20% py-0 px-1"
-              onClick={() => navigateBack()}
-            >
-              <AutoResizeText minFontSize={10}>{t("back")}</AutoResizeText>
+            <button type="button" class="btn btn-ghost-red min-h-8" onClick={navigateBack} disabled={uploading()}>
+              {t("back")}
             </button>
           </div>
         </div>
-        <div class="rounded-lg b-1 b-gray-400/50 p-3 mb-3 md:mb-4">
-          <div class="mb-3 flex flex-wrap items-center gap-2 text-sm">
-            <label class="flex items-center gap-2 font-bold">
-              {t("deckMode")}
-              <select
-                class="rounded b-1 b-gray-400/50 px-2 py-1 font-normal"
-                value={deckSize()}
-                onChange={(e) => {
-                  setDeckSize(e.currentTarget.value === String(CIRCULATION_DECK_CARD_COUNT)
-                    ? CIRCULATION_DECK_CARD_COUNT
-                    : STANDARD_DECK_CARD_COUNT);
-                  setDirty(true);
-                }}
-              >
-                <option value={STANDARD_DECK_CARD_COUNT}>
-                  {t("deckModeStandard", { count: STANDARD_DECK_CARD_COUNT })}
-                </option>
-                <option value={CIRCULATION_DECK_CARD_COUNT}>
-                  {t("deckModeCirculation", { count: CIRCULATION_DECK_CARD_COUNT })}
-                </option>
-              </select>
-            </label>
-            <span classList={{ "text-red-700": deckValue().cards.length > deckSize() }}>
-              {deckValue().cards.length} / {deckSize()}
-            </span>
-          </div>
-          <div class="flex flex-row flex-wrap items-center gap-2 mb-2">
-            <span class="font-bold text-3.4 md:text-3.6">{t("deckVersion")}</span>
-            <span class="text-3 opacity-60">{t("deckVersionHint")}</span>
-            <span class="flex-grow" />
-            <Show when={previewVersions().length > 0}>
-              <button
-                type="button"
-                class="text-3 underline opacity-70"
-                onClick={() => setPreviewVersions([])}
-              >
-                {t("deckVersionClear")}
-              </button>
-            </Show>
-          </div>
-          <div class="flex flex-row flex-wrap gap-1.5">
-            <For each={VERSIONS}>
-              {(v) => (
-                <button
-                  type="button"
-                  class="text-3 px-2 py-1 rounded b-1"
-                  classList={{
-                    "b-amber-500 bg-amber-500/20": previewVersions().includes(v),
-                    "b-gray-400/40": !previewVersions().includes(v),
-                  }}
-                  onClick={() => togglePreviewVersion(v)}
-                >
-                  {v}
-                </button>
-              )}
-            </For>
-          </div>
-          <Show when={previewVersions().length > 0}>
-            <div class="text-3 mt-2">
-              本牌组版本：<span class="font-bold">{previewVersions().join(" / ")}</span>
-            </div>
+        <div class="flex shrink-0 flex-wrap items-center gap-2 text-sm">
+          <select
+            aria-label={t("deckMode")}
+            class="h-9 rounded-md border border-slate-300 px-2"
+            value={deckSize()}
+            onChange={(e) => {
+              setDeckSize(e.currentTarget.value === String(CIRCULATION_DECK_CARD_COUNT)
+                ? CIRCULATION_DECK_CARD_COUNT
+                : STANDARD_DECK_CARD_COUNT);
+              setDirty(true);
+            }}
+          >
+            <option value={STANDARD_DECK_CARD_COUNT}>
+              {t("deckModeStandard", { count: STANDARD_DECK_CARD_COUNT })}
+            </option>
+            <option value={CIRCULATION_DECK_CARD_COUNT}>
+              {t("deckModeCirculation", { count: CIRCULATION_DECK_CARD_COUNT })}
+            </option>
+          </select>
+          <span class="tabular-nums" classList={{ "text-red-700": deckValue().cards.length > deckSize() }}>
+            {deckValue().cards.length} / {deckSize()}
+          </span>
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            class="lg:hidden flex-1 min-w-0 truncate text-left h-9 rounded-md border border-slate-300 px-2"
+            title={selectedVersions()}
+            onClick={() => {
+              setDraftVersions([...previewVersions()]);
+              versionDialog.showModal();
+            }}
+          >
+            {t("deckVersionShort")} · {selectedVersions()}
+          </button>
+          <span class="hidden lg:block min-w-0 truncate text-slate-600">{selectedVersions()}</span>
+          <Show when={previewState() === "loading"}>
+            <span role="status" class="text-xs text-slate-600">{t("loading")}</span>
           </Show>
-          <div class="text-3 mt-2 opacity-70">
+        </div>
+        <div class="min-h-0 flex-1 flex gap-3">
+          <aside class="hidden lg:flex shrink-0 w-26 flex-col gap-2 border-r border-slate-200 pr-2 min-h-0">
+            <h3 class="font-semibold">{t("deckVersion")}</h3>
+            <div class="flex-1 overflow-y-auto pr-1">
+              <VersionOptions versions={previewVersions} onChange={changeVersions} />
+            </div>
+          </aside>
+          <div class="min-w-0 min-h-0 flex-1">
             <Switch>
-              <Match when={previewState() === "loading"}>{t("loading")}</Match>
-              <Match when={previewState() === "error"}>{t("loadFailed", { message: "" })}</Match>
-              <Match when={previewState() === "ready"}>
-                {previewProfile()
-                  ? `${previewProfile()!.name} · base ${previewProfile()!.baseVersion}`
-                  : `普通 · ${previewSingle() ?? ""}`}
+              <Match when={userDeckData.loading || previewState() === "loading"}>{t("loading")}</Match>
+              <Match when={status().type !== "guest" && userDeckData.error}>
+                {t("loadFailed", { message: getErrorMessage(userDeckData.error) })}
               </Match>
-              <Match when={true}>{t("deckVersionNone")}</Match>
+              <Match when={previewState() === "error"}>
+                {t("deckVersionLoadFailed")}
+                <button type="button" class="ml-2 underline" onClick={() => setPreviewVersions([...previewVersions()])}>
+                  {t("retry")}
+                </button>
+              </Match>
+              <Match when={status().type !== "notLogin"}>
+                <DeckBuilder
+                  class="w-full h-full"
+                  assetsManager={assetsManager(previewDetail() ?? previewSingle() ?? undefined)}
+                  hideVersionSelect
+                  characterBlacklist={previewDetail()?.deck?.blacklist}
+                  locale={locale()}
+                  deck={deckValue()}
+                  actionCardLimit={deckSize()}
+                  onChangeDeck={(deck) => {
+                    setDeckValue(deck);
+                    setDirty(true);
+                  }}
+                />
+              </Match>
             </Switch>
           </div>
         </div>
-        <Switch>
-          <Match when={userDeckData.loading}>{t("loading")}</Match>
-          <Match when={status().type !== "guest" && userDeckData.error}>
-            {t("loadFailed", {
-              message: getErrorMessage(userDeckData.error),
-            })}
-          </Match>
-          <Match when={status().type !== "notLogin"}>
-            <DeckBuilder
-              class={`h-[calc(100dvh-9rem)] @3xl:h-auto w-full flex-grow min-h-0`}
-              assetsManager={assetsManager(previewDetail() ?? previewSingle() ?? undefined)}
-              hideVersionSelect
-              characterBlacklist={previewDetail()?.deck?.blacklist}
-              locale={locale()}
-              deck={deckValue()}
-              actionCardLimit={deckSize()}
-              onChangeDeck={(v) => (setDeckValue(v), setDirty(true))}
-            />
-          </Match>
-        </Switch>
       </div>
+      <dialog ref={versionDialog} aria-label={t("deckVersion")} class="deck-editor-dialog m-auto w-[min(94vw,28rem)] rounded-xl bg-white p-4 shadow-xl">
+        <h3 class="font-bold text-lg">{t("deckVersion")}</h3>
+        <p class="text-sm text-slate-600 mt-1">{t("deckVersionHint")}</p>
+        <div class="mt-2 max-h-[50dvh] overflow-y-auto">
+          <VersionOptions versions={draftVersions} onChange={setDraftVersions} />
+        </div>
+        <div class="flex flex-wrap justify-end gap-2 mt-3">
+          <button type="button" class="btn btn-ghost" onClick={() => versionDialog.close()}>{t("cancel")}</button>
+          <button type="button" class="btn btn-solid-blue" onClick={() => {
+            changeVersions(draftVersions());
+            versionDialog.close();
+          }}>{t("applyDeckVersions")}</button>
+        </div>
+      </dialog>
+      <dialog ref={leaveDialog} aria-label={t("leaveDeckTitle")} class="deck-editor-dialog m-auto w-[min(94vw,29rem)] rounded-xl bg-white p-4 shadow-xl">
+        <h3 class="font-bold text-lg">{t("leaveDeckTitle")}</h3>
+        <p class="text-sm mt-2">{valid() ? t("leaveDeckUnsaved") : t("leaveDeckIncomplete", { count: deckSize() })}</p>
+        <div class="flex flex-wrap justify-end gap-2 mt-4">
+          <button type="button" class="btn btn-ghost" autofocus onClick={() => leaveDialog.close()}>{t("continueEditing")}</button>
+          <button type="button" class="btn btn-outline-red" disabled={uploading()} onClick={leave}>{t("discardAndBack")}</button>
+          <Show when={canSave()}>
+            <button type="button" class="btn btn-solid-green" onClick={async () => {
+              if (await saveDeck()) {
+                leave();
+              }
+            }}>{t("saveAndBack")}</button>
+          </Show>
+        </div>
+      </dialog>
     </Layout>
   );
 }

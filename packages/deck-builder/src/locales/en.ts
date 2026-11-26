@@ -3,6 +3,12 @@ import type { I18nDictionary } from ".";
 export default {
   characters: "Characters",
   actionCards: "Action Cards",
+  cardPool: "Card pool",
+  currentDeck: "Current deck",
+  cardPages: "Card pool pages",
+  previousPage: "Previous",
+  nextPage: "Next",
+  noMatchingCards: "No cards match the filters",
   versionBelow: "Showing {{version}} and earlier only",
   filter: "Filter",
   clear: "Clear",

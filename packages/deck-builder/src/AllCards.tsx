@@ -30,6 +30,7 @@ export interface AllCardsProps extends DeckData {
   onChangeDeck?: (deck: Deck) => void;
   onSwitchTab?: (tab: number) => void;
   onSetVersion?: (version: number) => void;
+  onShowDeck?: () => void;
 }
 
 export function AllCards(props: AllCardsProps) {
@@ -38,11 +39,7 @@ export function AllCards(props: AllCardsProps) {
 
   return (
     <div
-      class={`min-w-0 min-h-0 flex-1
-        h-[calc(100cqh-18.5rem)] @3xl:h-full DP:@3xl:h-full
-        flex flex-col
-        DP:hidden DP:h-0
-        @3xl:flex DP:@3xl:flex`}
+      class="min-w-0 min-h-0 flex-1 flex flex-col DP:hidden DP:@3xl:flex"
     >
       <div class="flex flex-row mb-2">
         <button
@@ -59,6 +56,11 @@ export function AllCards(props: AllCardsProps) {
         >
           {t("actionCards")}
         </button>
+        <Show when={props.onShowDeck}>
+          <button type="button" class="@3xl:hidden ml-auto h-8 rounded-lg b-1 px-2 text-sm" onClick={props.onShowDeck}>
+            {t("currentDeck")}
+          </button>
+        </Show>
         <Show when={!props.hideVersionSelect}>
         <Show
           when={!props.versionSpecified}
@@ -84,7 +86,7 @@ export function AllCards(props: AllCardsProps) {
         </Show>
         </Show>
       </div>
-      <div class="min-h-0">
+      <div class="min-h-0 flex-1">
         <div
           bool:data-visible={tab() === 0}
           class="h-full hidden data-[visible]:block"

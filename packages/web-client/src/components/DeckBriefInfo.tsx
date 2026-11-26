@@ -22,6 +22,7 @@ import { useAuth } from "../auth";
 import { copyShareCode, getErrorMessage } from "../utils";
 import { useI18n } from "../i18n";
 import { CIRCULATION_DECK_CARD_COUNT } from "@gi-tcg/typings";
+import { getDeckVersions } from "../deckVersions";
 
 export interface DeckInfoProps extends DeckInfo {
   editable?: boolean;
@@ -56,6 +57,8 @@ export function DeckBriefInfo(props: DeckInfoProps) {
   const navigate = useNavigate();
   const { status } = useAuth();
   const [, { removeGuestDeck }] = useGuestDecks();
+  const versionText = () => getDeckVersions(props.versions).join(" / ") || t("deckVersionDefault");
+  const circulation = () => props.cards.length === CIRCULATION_DECK_CARD_COUNT;
 
   const viewDeck = (e: MouseEvent) => {
     e.stopPropagation();
@@ -89,18 +92,13 @@ export function DeckBriefInfo(props: DeckInfoProps) {
 
   return (
     <div
-      class="w-full deck-info-card transition-all flex flex-col p-1 md:p-2 rounded-xl select-none cursor-default"
+      class="w-full deck-info-card transition-all flex flex-col p-1 md:p-2 rounded-xl select-none cursor-pointer"
       onClick={viewDeck}
     >
       <div class="px-2 py-1 flex flex-row justify-between items-center">
         <h5 class="font-bold text-blue-900 overflow-hidden whitespace-nowrap text-ellipsis">
           {props.name}
         </h5>
-        <Show when={props.cards.length === CIRCULATION_DECK_CARD_COUNT}>
-          <span class="ml-auto px-2 text-xs text-blue-800 whitespace-nowrap">
-            {t("rule_circulation_name")}
-          </span>
-        </Show>
         <div class="flex-shrink-0 flex flex-row gap-2">
           <button
             class="btn color-blue-900 h-6 w-6 p-0 hover:color-blue-500"
@@ -129,6 +127,15 @@ export function DeckBriefInfo(props: DeckInfoProps) {
             </button>
           </Show>
         </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-x-2 gap-y-1 px-2 pb-1 text-xs">
+        <span
+          class="rounded px-1.5 py-0.5 whitespace-nowrap"
+          classList={{ "bg-blue-100 text-blue-800": circulation(), "bg-slate-100 text-slate-700": !circulation() }}
+        >
+          {circulation() ? t("rule_circulation_name") : t("standardMode")}
+        </span>
+        <span class="break-words text-slate-600 tabular-nums">{versionText()}</span>
       </div>
       <div class="p-1 md:p-2 flex flex-row items-center justify-around">
         <For each={props.characters}>{(id) => <CharacterAvatar id={id} />}</For>

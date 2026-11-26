@@ -16,7 +16,7 @@
 import { createEffect, createMemo, createSignal } from "solid-js";
 import { PoolCard } from "./Card";
 import type { AllCardsProps } from "./AllCards";
-import { Key } from "@solid-primitives/keyed";
+import { CardPool } from "./CardPool";
 import type { DeckDataActionCardInfo } from "@gi-tcg/assets-manager";
 import { CARD_TAG_IMG_NAME_MAP, CARD_TYPE_TEXT_KEYS, CARD_COST_TEXT_KEYS } from "./TagIcon";
 import { FilterBar } from "./FilterBar";
@@ -79,17 +79,17 @@ export function AllActionCards(props: AllCardsProps) {
     }
   };
 
+  const currentCharacters = createMemo(() => props.deck.characters);
+  const currentChTags = createMemo(() => currentCharacters().flatMap(
+    (c) => props.characters.get(c)?.tags ?? [],
+  ));
   const valid = (actionCard: DeckDataActionCardInfo) => {
-    const currentCharacters = props.deck.characters;
-    const currentChTags = currentCharacters.flatMap(
-      (c) => props.characters.get(c)?.tags ?? [],
-    );
     if (actionCard.relatedCharacterId !== null) {
-      return currentCharacters.includes(actionCard.relatedCharacterId);
+      return currentCharacters().includes(actionCard.relatedCharacterId);
     }
     if (actionCard.relatedCharacterTag !== null) {
       return (
-        currentChTags.filter((t) => t === actionCard.relatedCharacterTag)
+        currentChTags().filter((t) => t === actionCard.relatedCharacterTag)
           .length >= 2
       );
     }
@@ -133,9 +133,10 @@ export function AllActionCards(props: AllCardsProps) {
     return true;
   };
 
-  const sortedActionCards = createMemo(() => {
+  const shownActionCards = createMemo(() => {
     return props.actionCards
       .values()
+      .filter(shown)
       .toArray()
       .toSorted(
         // The sort callback is guaranteed to be synchronous, so it's safe to use signals inside
@@ -178,12 +179,10 @@ export function AllActionCards(props: AllCardsProps) {
           },
         ]}
       />
-      <ul class="flex-grow overflow-auto grid grid-cols-[repeat(auto-fill,minmax(60px,1fr))] gap-2 pb-2 @3xl:pb-0 [scrollbar-width:thin]">
-        <Key each={sortedActionCards()} by="id">
+      <CardPool cards={shownActionCards()}>
           {(ac) => (
             <li
-              class="hidden data-[shown]-block relative cursor-pointer data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60 data-[disabled]:filter-none hover:brightness-110"
-              bool:data-shown={shown(ac())}
+              class="relative cursor-pointer data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60 data-[disabled]:filter-none hover:brightness-110"
               bool:data-disabled={fullCards() && !count(ac().id)}
               onClick={() => {
                 if (valid(ac())) {
@@ -201,8 +200,7 @@ export function AllActionCards(props: AllCardsProps) {
               />
             </li>
           )}
-        </Key>
-      </ul>
+      </CardPool>
     </div>
   );
 }

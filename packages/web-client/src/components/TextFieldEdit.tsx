@@ -61,8 +61,8 @@ export function TextFieldEdit(props: TextFieldEditProps) {
     <Show
       when={editing() && !props.disable}
       fallback={
-        <div class="flex flex-row items-center gap-2">
-          <h2 class={`min-w-0 overflow-hidden whitespace-nowrap text-ellipsis flex-shrink-0 ${props.class}`}>
+        <div class="flex max-w-full min-w-0 flex-row items-center gap-2">
+          <h2 class={`min-w-0 overflow-hidden whitespace-nowrap text-ellipsis ${props.class}`}>
             {props.value}
           </h2>
           <button
@@ -76,14 +76,14 @@ export function TextFieldEdit(props: TextFieldEditProps) {
     >
       <form
         onSubmit={submit}
-        class="flex flex-row gap-1 md:gap-3 text-3.2 md:text-3.5"
+        class="flex min-w-0 max-w-full flex-row gap-1 md:gap-3 text-3.2 md:text-3.5"
       >
         <input
           type="text"
           required
           ref={(el) => (inputEl = el)}
           name="name"
-          class="input input-outline min-w-40 md:w-50 h-8 text-1rem"
+          class="input input-outline min-w-0 w-40 md:w-50 h-8 text-1rem"
           placeholder={props.placeholder}
         />
         <button

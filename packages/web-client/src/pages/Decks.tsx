@@ -13,11 +13,13 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import { For, Match, Switch, createResource, Accessor } from "solid-js";
+import { For, Match, Switch, createResource, createSignal, Accessor } from "solid-js";
 import { Layout } from "../layouts/Layout";
 import axios, { AxiosError } from "axios";
 import { A } from "@solidjs/router";
 import { DeckBriefInfo } from "../components/DeckBriefInfo";
+import { ALL_DECK_VERSIONS, DeckVersionFilter } from "../components/DeckVersionFilter";
+import { getDeckVersionKey } from "../deckVersions";
 import type { Deck } from "@gi-tcg/typings";
 import { useGuestDecks } from "../guest";
 import { useAuth } from "../auth";
@@ -49,7 +51,7 @@ export function useDecks(): UseDecksResult {
   const { status } = useAuth();
   const EMPTY = { count: 0, data: [] };
   const [userDecks, { refetch }] = createResource(
-    status,
+    () => status().type === "user",
     () => axios.get<DecksResponse>("decks").then((res) => res.data),
     {
       initialValue: EMPTY,
@@ -81,6 +83,10 @@ export default function Decks() {
   const { t } = useI18n();
   const { status } = useAuth();
   const { decks, loading, error, refetch } = useDecks();
+  const [version, setVersion] = createSignal(ALL_DECK_VERSIONS);
+  const visibleDecks = () => decks().data.filter(
+    (deck) => version() === ALL_DECK_VERSIONS || getDeckVersionKey(deck.versions) === version(),
+  );
   const [, { pinGuestDeck }] = useGuestDecks();
 
   const pinDeck = async (deck: DeckInfo) => {
@@ -104,11 +110,14 @@ export default function Decks() {
   return (
     <Layout>
       <div class="container mx-auto h-full px-2 flex flex-col">
-        <div class="flex flex-row gap-4 justify-between items-center mb-5">
+        <div class="flex flex-wrap gap-2 justify-between items-center mb-4">
           <h2 class="text-2xl font-bold">{t("myDecks")}</h2>
-          <A class="btn btn-outline-green" href="/decks/new">
-            <i class="i-mdi-plus" /> {t("add")}
-          </A>
+          <div class="flex gap-2 min-w-0 max-w-full">
+            <DeckVersionFilter decks={decks().data} value={version()} onChange={setVersion} />
+            <A class="btn btn-outline-green shrink-0" href="/decks/new">
+              <i class="i-mdi-plus" /> {t("add")}
+            </A>
+          </div>
         </div>
         <Switch>
           <Match when={loading()}>{t("loading")}</Match>
@@ -118,9 +127,9 @@ export default function Decks() {
           <Match when={true}>
             <ul class="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-2 md:grid-cols-[repeat(auto-fill,minmax(240px,1fr))] md:gap-3 md:overflow-y-auto scrollbar-thin-hover">
               <For
-                each={decks().data}
+                each={visibleDecks()}
                 fallback={
-                  <li class="p-4 text-gray-5">{t("noDecksAddHint")}</li>
+                  <li class="p-4 text-gray-5">{t(decks().count ? "noDecksForVersion" : "noDecksAddHint")}</li>
                 }
               >
                 {(deckData) => (
