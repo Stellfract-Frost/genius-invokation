@@ -22,7 +22,7 @@ import type {
 } from "./decks.controller";
 import { type Deck } from "@gi-tcg/typings";
 import { decks, type Deck as DeckModel } from "../db/schema";
-import { and, eq, desc, count } from "drizzle-orm";
+import { and, eq, desc, count, sql } from "drizzle-orm";
 import {
   ASSETS_MANAGER,
   buildDeckMatchesProfileDbFilter,
@@ -78,10 +78,13 @@ export class DecksService {
 
   async getAllDecks(
     userId: number,
-    { skip = 0, take = 100, profileId }: QueryDeckDto,
+    { skip = 0, take = 100, profileId, deckSize }: QueryDeckDto,
   ): Promise<PaginationResult<DeckWithDeckModel>> {
     const where = and(
       eq(decks.ownerUserId, userId),
+      deckSize === undefined
+        ? void 0
+        : sql`jsonb_array_length(${decks.cards}) = ${deckSize}`,
       typeof profileId === "undefined"
         ? void 0
         : buildDeckMatchesProfileDbFilter(profilesService.get(profileId)),

@@ -17,6 +17,10 @@ import { Hono } from "hono";
 import { NotFoundException } from "../errors";
 import { type } from "arktype";
 import { VERSIONS, type Version } from "@gi-tcg/core";
+import {
+  CIRCULATION_DECK_CARD_COUNT,
+  STANDARD_DECK_CARD_COUNT,
+} from "@gi-tcg/typings";
 import { sValidator } from "@hono/standard-validator";
 import { getUserId } from "../auth/user.decorator";
 import { decksService, profilesService } from "../services";
@@ -34,9 +38,15 @@ const VersionSchema = type("string").narrow(
     ctx.reject("a supported game version"),
 );
 
+const DeckCardCountSchema = type.unit(CIRCULATION_DECK_CARD_COUNT)
+  .or(type.unit(STANDARD_DECK_CARD_COUNT));
+
 export const DeckDto = type({
   characters: "(number.integer > 0)[] == 3",
-  cards: "(number.integer > 0)[] == 30",
+  cards: type("(number.integer > 0)[]").narrow((cards, ctx) =>
+    DeckCardCountSchema.allows(cards.length) ||
+    ctx.reject("an array of 24 or 30 cards"),
+  ),
   "versions?": VersionSchema.array(),
 });
 export type DeckDto = typeof DeckDto.infer;
@@ -49,22 +59,27 @@ export type UpdateDeckDto = typeof UpdateDeckDto.infer;
 
 export const QueryDeckDto = PaginationDto.merge({
   "profileId?": "string",
+  "deckSize?": IntParam.to(DeckCardCountSchema),
 });
 export type QueryDeckDto = typeof QueryDeckDto.infer;
 
 const DeckParam = type({ deckId: IntParam });
-const FilterDecksDto = type({ profileId: "string", decks: DeckDto.array() });
+const FilterDecksDto = type({
+  profileId: "string",
+  "deckSize?": DeckCardCountSchema,
+  decks: DeckDto.array(),
+});
 
 export const DecksController = new Hono()
   .post("/version", sValidator("json", CreateDeckDto), async (c) =>
     c.json(await decksService.deckToCode(c.req.valid("json")), 201),
   )
   .post("/filter", sValidator("json", FilterDecksDto), async (c) => {
-    const { profileId, decks } = c.req.valid("json");
+    const { profileId, deckSize, decks } = c.req.valid("json");
     const profile = profilesService.get(profileId);
     return c.json({
       matches: await Promise.all(
-        decks.map((deck) => deckMatchesProfile(deck, profile)),
+        decks.map((deck) => deckMatchesProfile(deck, profile, deckSize)),
       ),
     });
   })

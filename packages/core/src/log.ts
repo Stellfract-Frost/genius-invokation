@@ -25,12 +25,12 @@ export interface GameStateLogEntry {
   readonly canResume: boolean;
 }
 
-interface StoreEntry {
-  key: any;
-  value: any;
+interface SerializationStore {
+  indices: Map<unknown, number>;
+  values: any[];
 }
 
-function serializeImpl(store: StoreEntry[], v: unknown): any {
+function serializeImpl(store: SerializationStore, v: unknown): any {
   if (
     typeof v === "number" ||
     typeof v === "string" ||
@@ -39,20 +39,17 @@ function serializeImpl(store: StoreEntry[], v: unknown): any {
   ) {
     return v;
   }
-  const index = store.findIndex((entry) => entry.key === v);
-  if (index !== -1) {
+  const index = store.indices.get(v);
+  if (index !== undefined) {
     return { $: index };
   }
+  let result: any;
   if (Array.isArray(v)) {
-    const result = v.map((obj) => serializeImpl(store, obj));
-    if (result.length >= 2) {
-      store.push({ key: v, value: result });
-      return { $: store.length - 1 };
-    } else {
+    result = v.map((obj) => serializeImpl(store, obj));
+    if (result.length < 2) {
       return result;
     }
-  }
-  if (v instanceof Map) {
+  } else if (v instanceof Map) {
     return {
       __type: "map",
       entries: Array.from(v.entries()).map(([key, value]) => [
@@ -60,35 +57,34 @@ function serializeImpl(store: StoreEntry[], v: unknown): any {
         serializeImpl(store, value),
       ]),
     };
-  }
-  if (v instanceof Set) {
+  } else if (v instanceof Set) {
     return {
       __type: "set",
       values: Array.from(v).map((value) => serializeImpl(store, value)),
     };
-  }
-  if (typeof v === "object") {
+  } else if (typeof v === "object") {
     const proto = Object.getPrototypeOf(v);
     if (proto !== Object.prototype && proto !== null) {
       return null; // Non-plain objects are not serialized
     }
     if ("__definition" in v && "id" in v) {
-      const result: any = {
+      result = {
         $$: v.__definition,
         id: v.id,
       };
-      store.push({ key: v, value: result });
-      return { $: store.length - 1 };
+    } else {
+      result = {};
+      for (const key in v) {
+        result[key] = serializeImpl(store, (v as Record<any, any>)[key]);
+      }
     }
-    const result: any = {};
-    for (const key in v) {
-      result[key] = serializeImpl(store, (v as Record<any, any>)[key]);
-    }
-    store.push({ key: v, value: result });
-    return { $: store.length - 1 };
   } else {
     return v;
   }
+  const newIndex = store.values.length;
+  store.indices.set(v, newIndex);
+  store.values.push(result);
+  return { $: newIndex };
 }
 
 type MakePropPartial<T, K extends PropertyKey> = Omit<T, K> & {
@@ -111,7 +107,7 @@ export function serializeGameStateLog(
   log: readonly GameStateLogEntry[],
 ): SerializedLog {
   const logResult: SerializedLogEntry[] = [];
-  const store: StoreEntry[] = [];
+  const store: SerializationStore = { indices: new Map(), values: [] };
   for (const entry of log) {
     const omittedState: MakePropPartial<GameState, "data"> = {
       ...entry.state,
@@ -126,7 +122,7 @@ export function serializeGameStateLog(
   }
   return {
     v: CORE_VERSION,
-    store: store.map(({ value }) => value),
+    store: store.values,
     log: logResult,
   };
 }

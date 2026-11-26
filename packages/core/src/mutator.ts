@@ -1035,16 +1035,25 @@ export class StateMutator {
   private refillCirculationPile(who: 0 | 1) {
     const { roundNumber } = this.state;
     const runtime = getRuleRuntime(this.state);
-    const refillRounds: [number, number] = [
-      ...(runtime.circulationRefillRounds ?? [0, 0]),
-    ];
-    const extraKnowledge =
-      roundNumber > 1 && refillRounds[who] !== roundNumber ? roundNumber - 1 : 0;
-    if (extraKnowledge > 0) {
-      refillRounds[who] = roundNumber;
-      this.setRuleRuntime({ ...runtime, circulationRefillRounds: refillRounds });
+    const previous = runtime.circulationRefills;
+    const counts: [number, number] =
+      previous?.roundNumber === roundNumber ? [...previous.counts] : [0, 0];
+    const extraKnowledge = counts[who];
+    counts[who] += 1;
+    this.setRuleRuntime({
+      ...runtime,
+      circulationRefills: { roundNumber, counts },
+    });
+
+    // 新生成的牌放在弃牌堆前面，牌库容量不足时优先洗回。
+    for (const card of this.createForbiddenKnowledgeCards(
+      who,
+      extraKnowledge,
+      "discard",
+    )) {
+      this.mutate({ ...card, targetIndex: 0 });
     }
-    this.reshuffleDiscardIntoPile(who, extraKnowledge);
+    this.reshuffleDiscardIntoPile(who);
   }
 
   preparePileForDraw(who: 0 | 1) {
@@ -1128,15 +1137,14 @@ export class StateMutator {
   }
 
   /** 「运转」：把弃牌堆洗回牌库（普通牌随机、禁忌知识均匀） */
-  private reshuffleDiscardIntoPile(who: 0 | 1, extraKnowledge = 0) {
+  private reshuffleDiscardIntoPile(who: 0 | 1) {
     const { pile, discard } = this.state.players[who];
-    const knowledge = this.createForbiddenKnowledgeCards(who, extraKnowledge);
     const recycleCapacity = Math.max(
       0,
-      this.state.config.maxPileCount - pile.length - knowledge.length,
+      this.state.config.maxPileCount - pile.length,
     );
     const cards = discard.slice(0, recycleCapacity);
-    if (cards.length === 0 && knowledge.length === 0) {
+    if (cards.length === 0) {
       return;
     }
     const forbiddenId = RULE_RELATED_DEFINITION_IDS.forbiddenKnowledge;
@@ -1155,15 +1163,12 @@ export class StateMutator {
       value: { ...card, id: 0 },
     }));
     this.insertPileCards(
-      payloads.filter((p) => p.value.definition.id !== forbiddenId),
-      "random",
+      this.shuffle(payloads.filter((p) => p.value.definition.id !== forbiddenId)),
+      "top",
       who,
     );
     this.insertPileCards(
-      [
-        ...knowledge,
-        ...payloads.filter((p) => p.value.definition.id === forbiddenId),
-      ],
+      payloads.filter((p) => p.value.definition.id === forbiddenId),
       "spaceAround",
       who,
     );
@@ -1171,7 +1176,7 @@ export class StateMutator {
 
   insertForbiddenKnowledge(who: 0 | 1, count: number) {
     this.insertPileCards(
-      this.createForbiddenKnowledgeCards(who, count),
+      this.createForbiddenKnowledgeCards(who, count, "pile"),
       "spaceAround",
       who,
     );
@@ -1180,7 +1185,8 @@ export class StateMutator {
   private createForbiddenKnowledgeCards(
     who: 0 | 1,
     count: number,
-  ): InsertPilePayload[] {
+    area: "pile" | "discard",
+  ): CreateEntityM[] {
     if (count <= 0) {
       return [];
     }
@@ -1190,7 +1196,7 @@ export class StateMutator {
     return definition
       ? Array.from({ length: count }, () => ({
           type: "createEntity" as const,
-          target: { who, type: "pile" as const, cardId: 0 },
+          target: { who, type: area, cardId: 0 },
           value: { id: 0, definition, variables: {}, attachments: [] },
         }))
       : [];

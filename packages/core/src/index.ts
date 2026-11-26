@@ -44,6 +44,7 @@ export {
   CHAOS_POOL,
   isRoomRuleId,
   roomRuleExtensionDefinition,
+  getRoomDeckCardCount,
   getRoomRules,
   getRuleRuntime,
   isRuleActiveThisRound,

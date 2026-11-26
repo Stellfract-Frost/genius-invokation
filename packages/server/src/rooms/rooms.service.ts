@@ -42,6 +42,7 @@ import {
   VERSIONS,
   type GameState,
   setAsyncContext,
+  getRoomDeckCardCount,
   isRoomRuleId,
 } from "@gi-tcg/core";
 import {
@@ -837,7 +838,11 @@ export class RoomsService {
     };
 
     try {
-      await verifyDeckForProfile(playerInfo.deck, compiledProfile);
+      await verifyDeckForProfile(
+        playerInfo.deck,
+        compiledProfile,
+        getRoomDeckCardCount(roomRules),
+      );
     } catch (e) {
       if (e instanceof DeckVerificationError) {
         throw new BadRequestException(`Deck verification failed: ${e.message}`);
@@ -959,7 +964,11 @@ export class RoomsService {
     }
 
     try {
-      await verifyDeckForProfile(playerInfo.deck, room.compiledProfile);
+      await verifyDeckForProfile(
+        playerInfo.deck,
+        room.compiledProfile,
+        getRoomDeckCardCount(room.config.roomRules),
+      );
     } catch (e) {
       if (e instanceof DeckVerificationError) {
         throw new BadRequestException(`Deck verification failed: ${e.message}`);
@@ -975,6 +984,10 @@ export class RoomsService {
         return;
       }
       const players = room.getPlayers();
+      const hasGuest = players.some((p) => p.playerInfo.isGuest);
+      if (hasGuest && !s3) {
+        return;
+      }
       const gameData = JSON.stringify(room.getStateLog());
       if (s3) {
         const now = new Date().toISOString();
@@ -994,7 +1007,7 @@ export class RoomsService {
           );
         });
       }
-      if (players.some((p) => p.playerInfo.isGuest)) {
+      if (hasGuest) {
         return;
       }
       const playerIds = players.map(

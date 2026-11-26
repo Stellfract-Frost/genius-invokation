@@ -31,7 +31,7 @@ import {
 } from "solid-js";
 import { AllCards } from "./AllCards";
 import { CurrentDeck } from "./CurrentDeck";
-import type { Deck } from "@gi-tcg/typings";
+import { STANDARD_DECK_CARD_COUNT, type Deck } from "@gi-tcg/typings";
 import { createCardDataViewer } from "@gi-tcg/card-data-viewer";
 import {
   DEFAULT_ASSETS_MANAGER,
@@ -45,6 +45,7 @@ import { resolveTemplate, translator } from "@solid-primitives/i18n";
 export interface DeckBuilderProps extends JSX.HTMLAttributes<HTMLDivElement> {
   assetsManager?: AssetsManager;
   deck?: Deck;
+  actionCardLimit?: number;
   version?: string;
   /** 隐藏内置的版本下拉（由外部自带的版本选择器接管） */
   hideVersionSelect?: boolean;
@@ -71,7 +72,9 @@ const EMPTY_DECK: Deck = {
 };
 
 export function DeckBuilder(props: DeckBuilderProps) {
-  const [local, rest] = splitProps(props, ["assetsManager", "locale", "class"]);
+  const [local, rest] = splitProps(props, [
+    "assetsManager", "locale", "class", "actionCardLimit",
+  ]);
   let container!: HTMLDivElement;
   const assetsManager = createMemo(
     () => local.assetsManager ?? DEFAULT_ASSETS_MANAGER,
@@ -175,6 +178,7 @@ export function DeckBuilder(props: DeckBuilderProps) {
                   version={version()}
                   versionSpecified={versionSpecified()}
                   deck={props.deck ?? EMPTY_DECK}
+                  actionCardLimit={local.actionCardLimit ?? STANDARD_DECK_CARD_COUNT}
                   onChangeDeck={props.onChangeDeck}
                   onSetVersion={setVersion}
                   {...deckData()}
@@ -196,6 +200,7 @@ export function DeckBuilder(props: DeckBuilderProps) {
               <CurrentDeck
                 version={version()}
                 deck={props.deck ?? EMPTY_DECK}
+                actionCardLimit={local.actionCardLimit ?? STANDARD_DECK_CARD_COUNT}
                 onChangeDeck={props.onChangeDeck}
                 {...deckData()}
               />

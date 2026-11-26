@@ -198,8 +198,8 @@ function initPlayerState(
       ),
     );
     if (doubleHealth) {
-      variables.maxHealth = (variables.maxHealth ?? 10) * 2;
-      variables.health = (variables.health ?? 10) * 2;
+      variables.maxHealth = Math.floor(definition.varConfigs.maxHealth.initialValue * 1.5);
+      variables.health = Math.floor(definition.varConfigs.health.initialValue * 1.5);
     }
     characters.push({
       [StateSymbol]: "character",

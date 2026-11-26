@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import { For, Index, Show, createEffect } from "solid-js";
+import { For, Show, createEffect } from "solid-js";
 import type { AllCardsProps } from "./AllCards";
 import { DeckCard, TinyActionCard, TinyCharacterCard } from "./Card";
 import { createStore, produce } from "solid-js/store";
@@ -29,7 +29,7 @@ export function CurrentDeck(props: AllCardsProps) {
       () => null
     ) as (DeckDataCharacterInfo | null)[],
     cards: Array.from(
-      { length: 30 },
+      { length: props.actionCardLimit },
       () => null
     ) as (DeckDataActionCardInfo | null)[],
   });
@@ -47,7 +47,8 @@ export function CurrentDeck(props: AllCardsProps) {
         for (let i = 0; i < 3; i++) {
           prev.characters[i] = selectedChs[i] ?? null;
         }
-        for (let i = 0; i < 30; i++) {
+        prev.cards.length = Math.max(props.actionCardLimit, selectedAcs.length);
+        for (let i = 0; i < prev.cards.length; i++) {
           prev.cards[i] = selectedAcs[i] ?? null;
         }
       })

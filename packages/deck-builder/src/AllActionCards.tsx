@@ -34,7 +34,7 @@ export function AllActionCards(props: AllCardsProps) {
     return props.deck.cards.filter((c) => c === id).length;
   };
   const fullCards = () => {
-    return props.deck.cards.length >= 30;
+    return props.deck.cards.length >= props.actionCardLimit;
   };
 
   // Remove invalid action cards, including cards absent from the selected version

@@ -173,6 +173,12 @@ export { RpcRequest, RpcResponse };
 export { PbExposedMutation };
 export type ExposedMutation = FlattenOneof<PbExposedMutation["mutation"]>;
 
+export const STANDARD_DECK_CARD_COUNT = 30;
+export const CIRCULATION_DECK_CARD_COUNT = 24;
+export type DeckCardCount =
+  | typeof STANDARD_DECK_CARD_COUNT
+  | typeof CIRCULATION_DECK_CARD_COUNT;
+
 export interface Deck {
   characters: number[];
   cards: number[];

@@ -22,6 +22,7 @@ import { useDeckBuilderContext } from "./DeckBuilder";
 
 export interface AllCardsProps extends DeckData {
   deck: Deck;
+  actionCardLimit: number;
   version: number;
   versionSpecified?: boolean;
   hideVersionSelect?: boolean;

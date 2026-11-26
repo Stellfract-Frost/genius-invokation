@@ -21,6 +21,7 @@ import { useGuestDecks } from "../guest";
 import { useAuth } from "../auth";
 import { copyShareCode, getErrorMessage } from "../utils";
 import { useI18n } from "../i18n";
+import { CIRCULATION_DECK_CARD_COUNT } from "@gi-tcg/typings";
 
 export interface DeckInfoProps extends DeckInfo {
   editable?: boolean;
@@ -95,6 +96,11 @@ export function DeckBriefInfo(props: DeckInfoProps) {
         <h5 class="font-bold text-blue-900 overflow-hidden whitespace-nowrap text-ellipsis">
           {props.name}
         </h5>
+        <Show when={props.cards.length === CIRCULATION_DECK_CARD_COUNT}>
+          <span class="ml-auto px-2 text-xs text-blue-800 whitespace-nowrap">
+            {t("rule_circulation_name")}
+          </span>
+        </Show>
         <div class="flex-shrink-0 flex flex-row gap-2">
           <button
             class="btn color-blue-900 h-6 w-6 p-0 hover:color-blue-500"

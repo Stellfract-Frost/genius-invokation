@@ -1796,19 +1796,13 @@ export class SkillContext<Meta extends ContextMetaBase> {
       );
       return;
     }
-    // 只有「角色侧」生成的牌算衍生牌。
-    // 只读调用者的**定义类型**判断，不去查 state 里的区域：
-    // 技能执行中途 caller 可能已被移除（角色状态触发后自毁），
-    // 预览重放时更常见，查区域会抛 "Cannot found entity -xxxxx"。
-    //
-    // character  角色本体技能
-    // combatStatus 角色状态（如法尔伽普攻两次后的被动）
-    // attachment  角色身上的装备
-    // 而 eventCard（手牌）、support（场地）、summon（召唤物）生成的不算。
+    // 只读定义类型，触发效果的状态可能已经离场（例如消耗最后一次用量）。
     const callerType = this.self.definition.type;
     const markGenerated =
       callerType === "character" ||
+      callerType === "status" ||
       callerType === "combatStatus" ||
+      callerType === "equipment" ||
       callerType === "attachment" ||
       // 角色专属效果（如爱可菲的厨艺机关，虽是支援牌但只服务该角色）
       CHARACTER_DERIVED_CARD_IDS.has(cardDef.id);

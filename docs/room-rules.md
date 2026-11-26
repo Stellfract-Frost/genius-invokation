@@ -64,13 +64,13 @@ const state = InternalGame.createInitialState({
 | `shiftingCost` | 变化 | buff | 回合开始重分配手牌费用，**存增量**（见 7.1） |
 | `regeneration` | 回复 | buff | 回合结束双方全体回复 1 |
 | `extraDie` | 增费 | buff | 回合开始 +1 万能骰 |
-| `doubleHealth` | 膨胀 | buff | `initPlayerState` 里把角色 `maxHealth` 与 `health` 同时 ×2 |
+| `doubleHealth` | 膨胀 | buff | 初始生命上限和当前生命变为原值的 1.5 倍，向下取整 |
 | `skillFatigue` | 疲劳 | debuff | 本回合用过的技能再使用 +1 费，上限 +1，双方独立 |
 | `undercurrent` | 暗流 | debuff | **奇数回合**开始双方各 2 层诅咒 |
 | `restraint` | 束缚 | debuff | 每回合最多打出 7 张手牌 |
 | `noHeal` | 禁疗 | debuff | 治疗量归零（复活除外） |
 | `forbiddenKnowledge` | 禁忌 | debuff | 6 张禁忌知识**均匀**塞入牌库 |
-| `chaos` | 混沌 | special | 每回合随机抽一条增益规则，不重复，抽完重开 |
+| `chaos` | 混沌 | special | 每回合随机抽一条可在回合中生效的增益规则，不重复，抽完重开 |
 | `circulation` | 运转 | special | 弃牌堆机制，见第 4 节 |
 
 ## 4. 「运转」弃牌堆
@@ -120,16 +120,14 @@ onEndPhase（月感电等「回合结束」效果）
 ### 4.4 衍生牌判定
 
 ```ts
-private ruleIsDerivedCard(_who, card) {
-  return card.generated === true;
+private ruleIsDerivedCard(card: EntityState) {
+  return card.generated === true ||
+    CHARACTER_DERIVED_CARD_IDS.has(card.definition.id);
 }
 ```
 
-- **只有「角色侧生成」的牌才算衍生牌**。`mutator.createHandCard` 通过 `opt.markGenerated` 决定是否打标记，
-  `skill_context.createHandCard` 按**调用者所在区域**判定：`this._getEntityArea(this.self.id).type === "characters"`。
-  这样角色本体、角色身上的状态/装备触发的被动生成（如法尔伽普攻两次后的牌）都能覆盖，
-  而 `definition.type === "character"` 的写法会漏掉状态触发的场景。
-  数据层现有 66+ 处 `:createHandCard`，角色目录与卡牌目录各占一半，必须靠区域区分。
+- `skill_context.createHandCard` 根据调用者的定义类型标记角色衍生牌，覆盖角色、状态、出战状态、装备和附加效果。
+  法尔伽普攻两次后，由角色状态生成的「烈风终坠」会保留在手牌中。
 - 手牌生成、场地生成、规则塞入牌库的牌（如禁忌知识）**都不算**，按普通牌待遇（打出进弃牌堆、回合结束照常弃置）。
 - 标记写在 `mutator.createHandCard` 构造 `cardState` 时（**不要**写在 `insertHandCard`，见 7.1）。
 - 曾经用「定义不在初始牌库」作兜底，导致禁忌知识被误判为衍生牌、回合结束留在手上。已移除，不要加回来。
@@ -143,7 +141,7 @@ private ruleIsDerivedCard(_who, card) {
 
 普通抽牌和按条件抽牌都会逐张检查牌库。抽牌开始时若牌库为空，先洗回弃牌堆。实际抽到最后一张时立即洗回，即使当次抽牌刚好结束。
 
-第 n 回合，双方各自在首次抽到自己牌库最后一张牌时，额外把（n−1）张「禁忌知识」与弃牌堆洗回的同名牌一起均匀塞入牌库。第 1 回合加入 0 张。同一回合再次抽空时，继续洗回弃牌堆。
+每名玩家每回合第 n 次抽到自己牌库的最后一张牌时，先在自己的弃牌堆生成（n−1）张「禁忌知识」，再将弃牌堆洗回牌库，并将洗回的禁忌知识均匀分布。第 1 次生成 0 张，第 2 次生成 1 张，第 3 次生成 2 张，依此类推。双方独立计数，每回合重置。
 
 洗回前先为新增的「禁忌知识」预留容量。普通牌随机洗入，超出容量的旧牌留在弃牌堆。
 
@@ -178,7 +176,7 @@ private ruleIsDerivedCard(_who, card) {
 - `buildDeckMatchesProfileDbFilter` 必须同步放开，否则卡组列表仍会被过滤。
 - 游客卡组过滤接口要透传 `versions`，否则这条通道仍然受限。
 
-当前编辑器和房间校验要求初始牌组为 30 张。「运转」专用的 24 张牌组列入待办。
+组牌时可选择「普通」或「运转」，分别需要 30 或 24 张行动牌。建房和加入房间均按房间规则过滤并校验牌组。运转牌组的分享码带 `C24:` 前缀，可在本项目内导入。
 
 ## 7. 踩坑清单
 
@@ -268,6 +266,5 @@ corepack pnpm -C packages/test exec vitest run
 
 ## 10. 待办与已知边界
 
-- [ ] 实现「运转」专用的 24 张初始牌组。同步卡组编辑器、游客与账号牌组校验、开房和加入对局的合法性检查，保留已有 30 张普通牌组的使用方式。
 - [ ] 弃牌堆用真实卡背图（页面层需要拿到 assets 管理器）
 - [x] 多版本房间按房主牌组保存的版本组合建立配置，行动牌沿用已编译的恋雨杯 Live 定义及对应静态资料。

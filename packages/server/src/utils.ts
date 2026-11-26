@@ -13,7 +13,12 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import type { Deck } from "@gi-tcg/typings";
+import {
+  CIRCULATION_DECK_CARD_COUNT,
+  STANDARD_DECK_CARD_COUNT,
+  type Deck,
+  type DeckCardCount,
+} from "@gi-tcg/typings";
 import {
   DEFAULT_ASSETS_MANAGER,
   type AnyData,
@@ -73,10 +78,11 @@ export async function verifyDeck(deck: Deck): Promise<Version> {
       "deck must contain 3 characters",
     );
   }
-  if (cards.length !== 30) {
+  if (cards.length !== STANDARD_DECK_CARD_COUNT &&
+      cards.length !== CIRCULATION_DECK_CARD_COUNT) {
     throw new DeckVerificationError(
       DEC.SizeError,
-      "deck must contain 30 cards",
+      "deck must contain 24 or 30 cards",
     );
   }
   const characterTags = [];
@@ -157,7 +163,14 @@ export async function verifyDeck(deck: Deck): Promise<Version> {
 export async function verifyDeckForProfile(
   deck: Deck & { versions?: string[] | null },
   profile: CompiledProfile,
+  deckSize?: DeckCardCount,
 ) {
+  if (deckSize !== undefined && deck.cards.length !== deckSize) {
+    throw new DeckVerificationError(
+      DeckVerificationErrorCode.SizeError,
+      `this room requires a deck with ${deckSize} cards`,
+    );
+  }
   const version = await verifyDeck(deck);
   const { whitelist, blacklist, allowNewerCards } = profile.profile.deck ?? {};
   // 多版本卡组（作者声明兼容多个版本）不受目标规则配置的版本上限限制；
@@ -216,9 +229,10 @@ export function buildDeckMatchesProfileDbFilter(profile: CompiledProfile) {
 export async function deckMatchesProfile(
   deck: Deck & { versions?: string[] | null },
   profile: CompiledProfile,
+  deckSize?: DeckCardCount,
 ) {
   try {
-    await verifyDeckForProfile(deck, profile);
+    await verifyDeckForProfile(deck, profile, deckSize);
     return true;
   } catch (error) {
     if (error instanceof DeckVerificationError) {

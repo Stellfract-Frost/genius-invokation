@@ -32,7 +32,12 @@ import {
 } from "../profiles";
 import { Layout } from "../layouts/Layout";
 import axios, { AxiosError } from "axios";
-import type { Deck } from "@gi-tcg/typings";
+import {
+  CIRCULATION_DECK_CARD_COUNT,
+  STANDARD_DECK_CARD_COUNT,
+  type Deck,
+  type DeckCardCount,
+} from "@gi-tcg/typings";
 import { DEFAULT_ASSETS_MANAGER } from "@gi-tcg/assets-manager";
 import { useParams, useSearchParams } from "@solidjs/router";
 import { DeckBuilder } from "@gi-tcg/deck-builder";
@@ -91,9 +96,17 @@ export default function EditDeck() {
     characters: [],
     cards: [],
   });
-  const [userDeckData] = createResource(() =>
-    isNew ? void 0 : axios.get(`decks/${deckId}`).then((r) => r.data),
+  const [deckSize, setDeckSize] = createSignal<DeckCardCount>(STANDARD_DECK_CARD_COUNT);
+  const setDeck = (deck: Deck) => {
+    setDeckValue(deck);
+    setDeckSize(deck.cards.length === CIRCULATION_DECK_CARD_COUNT
+      ? CIRCULATION_DECK_CARD_COUNT : STANDARD_DECK_CARD_COUNT);
+  };
+  const [userDeckData] = createResource(
+    () => !isNew && status().type === "user",
+    () => axios.get<DeckInfo>(`decks/${deckId}`).then((r) => r.data),
   );
+  let deckLoaded = false;
 
   onMount(() => {
     try {
@@ -163,10 +176,10 @@ export default function EditDeck() {
   });
 
   createEffect(() => {
-    if (isNew) {
+    if (isNew || deckLoaded) {
       return;
     }
-    let deckInfo: DeckInfo = userDeckData.error ? void 0 : userDeckData();
+    let deckInfo = userDeckData.error ? void 0 : userDeckData();
     const { type } = status();
     if (type === "guest") {
       const found = guestDecks().find((d) => d.id === deckId);
@@ -176,7 +189,8 @@ export default function EditDeck() {
       deckInfo = found;
     }
     if (deckInfo) {
-      setDeckValue(unwrap(deckInfo));
+      deckLoaded = true;
+      setDeck(unwrap(deckInfo));
       setDeckName(deckInfo.name);
       // 服务端空数组不能覆盖本地已选版本：它可能只是"上次保存时还没选版本"，
       // 而本地记录的是用户随后选过、但尚未保存的版本。
@@ -204,7 +218,9 @@ export default function EditDeck() {
   const navigateBack = async () => {
     if (dirty()) {
       if (window.confirm(t("unsavedChangesConfirm"))) {
-        await saveDeck();
+        if (!await saveDeck()) {
+          return;
+        }
       }
     }
     history.back();
@@ -212,7 +228,7 @@ export default function EditDeck() {
 
   const valid = () => {
     const deck = deckValue();
-    return deck.characters.length === 3 && deck.cards.length === 30;
+    return deck.characters.length === 3 && deck.cards.length === deckSize();
   };
 
   const importCode = () => {
@@ -222,7 +238,7 @@ export default function EditDeck() {
     }
     try {
       const deck = DEFAULT_ASSETS_MANAGER.decode(input);
-      setDeckValue(deck);
+      setDeck(deck);
       setDirty(true);
     } catch (e) {
       if (e instanceof Error) {
@@ -272,6 +288,9 @@ export default function EditDeck() {
   };
 
   const saveDeck = async () => {
+    if (!valid() || uploading()) {
+      return false;
+    }
     const deckInfo = {
       ...deckValue(),
       name: deckName(),
@@ -326,7 +345,7 @@ export default function EditDeck() {
             <button class="btn btn-outline-blue" onClick={importCode}>
               {t("importShareCode")}
             </button>
-            <button class="btn btn-outline" onClick={exportCode}>
+            <button class="btn btn-outline" onClick={exportCode} disabled={!valid()}>
               {t("generateShareCode")}
             </button>
             <button
@@ -364,6 +383,31 @@ export default function EditDeck() {
           </div>
         </div>
         <div class="rounded-lg b-1 b-gray-400/50 p-3 mb-3 md:mb-4">
+          <div class="mb-3 flex flex-wrap items-center gap-2 text-sm">
+            <label class="flex items-center gap-2 font-bold">
+              {t("deckMode")}
+              <select
+                class="rounded b-1 b-gray-400/50 px-2 py-1 font-normal"
+                value={deckSize()}
+                onChange={(e) => {
+                  setDeckSize(e.currentTarget.value === String(CIRCULATION_DECK_CARD_COUNT)
+                    ? CIRCULATION_DECK_CARD_COUNT
+                    : STANDARD_DECK_CARD_COUNT);
+                  setDirty(true);
+                }}
+              >
+                <option value={STANDARD_DECK_CARD_COUNT}>
+                  {t("deckModeStandard", { count: STANDARD_DECK_CARD_COUNT })}
+                </option>
+                <option value={CIRCULATION_DECK_CARD_COUNT}>
+                  {t("deckModeCirculation", { count: CIRCULATION_DECK_CARD_COUNT })}
+                </option>
+              </select>
+            </label>
+            <span classList={{ "text-red-700": deckValue().cards.length > deckSize() }}>
+              {deckValue().cards.length} / {deckSize()}
+            </span>
+          </div>
           <div class="flex flex-row flex-wrap items-center gap-2 mb-2">
             <span class="font-bold text-3.4 md:text-3.6">{t("deckVersion")}</span>
             <span class="text-3 opacity-60">{t("deckVersionHint")}</span>
@@ -428,6 +472,7 @@ export default function EditDeck() {
               characterBlacklist={previewDetail()?.deck?.blacklist}
               locale={locale()}
               deck={deckValue()}
+              actionCardLimit={deckSize()}
               onChangeDeck={(v) => (setDeckValue(v), setDirty(true))}
             />
           </Match>

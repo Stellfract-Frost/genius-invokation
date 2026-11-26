@@ -25,7 +25,13 @@ import {
   splitProps,
 } from "solid-js";
 import { makePersisted } from "@solid-primitives/storage";
-import { VERSIONS } from "@gi-tcg/core";
+import {
+  ROOM_RULES,
+  VERSIONS,
+  getRoomDeckCardCount,
+  type RoomRuleId,
+} from "@gi-tcg/core";
+import { CIRCULATION_DECK_CARD_COUNT, type DeckCardCount } from "@gi-tcg/typings";
 import axios, { AxiosError } from "axios";
 import { ToggleSwitch } from "./ToggleSwitch";
 import { DeckInfoProps } from "./DeckBriefInfo";
@@ -37,13 +43,13 @@ import type { ProfileList, ProfileSummary } from "../profiles";
 import { useI18n } from "../i18n";
 
 function SelectableDeckInfo(
-  props: DeckInfoProps & Omit<JSX.InputHTMLAttributes<HTMLInputElement>, "id">,
+  props: Pick<DeckInfoProps, "characters" | "name"> &
+    JSX.InputHTMLAttributes<HTMLInputElement>,
 ) {
   const { assetsManager } = useI18n();
   const [deckInfo, inputProps] = splitProps(props, [
     "characters",
     "name",
-    "id",
   ]);
   return (
     <label class="relative group cursor-pointer min-w-15 w-full">
@@ -85,57 +91,33 @@ export interface RoomDialogProps {
     id: number;
     config: TimeConfig & {
       profile: ProfileSummary;
-      [k: string]: any;
+      roomRules?: RoomRuleId[];
+      private: boolean;
+      watchable: boolean;
     };
   };
 }
 
 interface TimeConfig {
-  nameKey:
+  nameKey?:
     | "timeConfigMinimal"
     | "timeConfigStandard"
     | "timeConfigDouble"
     | "timeConfigLong"
     | "timeConfigEndless";
-  estimationTime: number;
+  estimationTime?: number;
   initTotalActionTime: number;
   rerollTime: number;
   roundTotalActionTime: number;
   actionTime: number;
 }
 
-type RoomRulePolarity = "buff" | "debuff" | "special";
-
-interface RoomRuleUi {
-  id: string;
-  polarity: RoomRulePolarity;
-}
-
-/**
- * 与 `@gi-tcg/core` 的 `room_rules.ts` 保持一致。
- * 这里不直接 import core，是为了避免前端包新增对 core 的依赖。
- */
-const ROOM_RULE_UI: RoomRuleUi[] = [
-  { id: "circulation", polarity: "special" },
-  { id: "chaos", polarity: "special" },
-  { id: "extraDraw", polarity: "buff" },
-  { id: "shiftingCost", polarity: "buff" },
-  { id: "regeneration", polarity: "buff" },
-  { id: "extraDie", polarity: "buff" },
-  { id: "doubleHealth", polarity: "buff" },
-  { id: "skillFatigue", polarity: "debuff" },
-  { id: "undercurrent", polarity: "debuff" },
-  { id: "restraint", polarity: "debuff" },
-  { id: "noHeal", polarity: "debuff" },
-  { id: "forbiddenKnowledge", polarity: "debuff" },
-];
-
-const SPECIAL_RULES = ROOM_RULE_UI.filter(
+const SPECIAL_RULES = ROOM_RULES.filter(
   (rule) => rule.polarity === "special",
 );
 
-const BUFF_RULES = ROOM_RULE_UI.filter((rule) => rule.polarity === "buff");
-const DEBUFF_RULES = ROOM_RULE_UI.filter(
+const BUFF_RULES = ROOM_RULES.filter((rule) => rule.polarity === "buff");
+const DEBUFF_RULES = ROOM_RULES.filter(
   (rule) => rule.polarity === "debuff",
 );
 
@@ -205,11 +187,19 @@ export function RoomDialog(props: RoomDialogProps) {
   const [isPublic, setIsPublic] = createSignal(true);
   const [watchable, setWatchable] = createSignal(true);
   const [allowGuest, setAllowGuest] = createSignal(true);
+  const [selectedRules, setRoomRules] = createSignal<RoomRuleId[]>([]);
+  const roomRules = () => props.joiningRoomInfo
+    ? (props.joiningRoomInfo.config.roomRules ?? [])
+    : selectedRules();
+  const deckSize = createMemo(() => getRoomDeckCardCount(roomRules()));
   const [availableDecks, setAvailableDecks] = createSignal<DeckInfoProps[]>([]);
+  const matchingDecks = createMemo(() =>
+    availableDecks().filter((deck) => deck.cards.length === deckSize()),
+  );
   const [loadingDecks, setLoadingDecks] = createSignal(true);
   const [selectedDeck, setSelectedDeck] = createSignal<number | null>(null);
   const selectedDeckInfo = createMemo(() =>
-    availableDecks().find((deck) => deck.id === selectedDeck()),
+    matchingDecks().find((deck) => deck.id === selectedDeck()),
   );
   const deckVersions = createMemo(() => {
     const versions = selectedDeckInfo()?.versions;
@@ -217,11 +207,7 @@ export function RoomDialog(props: RoomDialogProps) {
   });
   const usesDeckVersions = () => editable() && deckVersions().length > 1;
   const [entering, setEntering] = createSignal(false);
-  const [roomRules, setRoomRules] = createSignal<string[]>(
-    props.joiningRoomInfo?.config?.roomRules ?? [],
-  );
-
-  const toggleRule = (id: string) => {
+  const toggleRule = (id: RoomRuleId) => {
     if (!editable()) {
       return;
     }
@@ -267,7 +253,8 @@ export function RoomDialog(props: RoomDialogProps) {
 
   const updateAvailableDecks = async (
     profileId: string,
-    signal?: AbortSignal,
+    deckSize: DeckCardCount,
+    signal: AbortSignal,
   ) => {
     setLoadingDecks(true);
     const { type } = status();
@@ -275,7 +262,7 @@ export function RoomDialog(props: RoomDialogProps) {
       let decks: DeckInfoProps[] = [];
       if (type === "user") {
         const { data } = await axios.get("decks", {
-          params: { profileId },
+          params: { profileId, deckSize },
           signal,
         });
         decks = data.data;
@@ -285,6 +272,7 @@ export function RoomDialog(props: RoomDialogProps) {
           "decks/filter",
           {
             profileId,
+            deckSize,
             decks: guest.map(({ characters, cards, versions }) => ({
               characters,
               cards,
@@ -295,12 +283,15 @@ export function RoomDialog(props: RoomDialogProps) {
         );
         decks = guest.filter((_, index) => data.matches[index]);
       }
+      if (signal.aborted) {
+        return;
+      }
       setAvailableDecks(decks);
       if (!decks.some((deck) => deck.id === selectedDeck())) {
         setSelectedDeck(null);
       }
     } catch (e) {
-      if (signal?.aborted) {
+      if (signal.aborted) {
         return;
       }
       setAvailableDecks([]);
@@ -318,14 +309,14 @@ export function RoomDialog(props: RoomDialogProps) {
     if (profileId) {
       const controller = new AbortController();
       onCleanup(() => controller.abort());
-      updateAvailableDecks(profileId, controller.signal);
+      updateAvailableDecks(profileId, deckSize(), controller.signal);
     }
   });
 
   const enterRoom = async () => {
     const deck = selectedDeckInfo();
     const currentProfile = profile();
-    if (!deck || !currentProfile) {
+    if (!deck || !currentProfile || loadingDecks() || entering()) {
       return;
     }
     setEntering(true);
@@ -500,10 +491,10 @@ export function RoomDialog(props: RoomDialogProps) {
                       onClick={() => toggleRule(rule.id)}
                     >
                       <h5 class="font-bold text-sm">
-                        {t(`rule_${rule.id}_name` as any)}
+                        {t(`rule_${rule.id}_name`)}
                       </h5>
                       <p class="text-xs text-gray-500 leading-snug">
-                        {t(`rule_${rule.id}_desc` as any)}
+                        {t(`rule_${rule.id}_desc`)}
                       </p>
                     </div>
                   )}
@@ -522,10 +513,10 @@ export function RoomDialog(props: RoomDialogProps) {
                       onClick={() => toggleRule(rule.id)}
                     >
                       <h5 class="font-bold text-sm">
-                        {t(`rule_${rule.id}_name` as any)}
+                        {t(`rule_${rule.id}_name`)}
                       </h5>
                       <p class="text-xs text-gray-500 leading-snug">
-                        {t(`rule_${rule.id}_desc` as any)}
+                        {t(`rule_${rule.id}_desc`)}
                       </p>
                     </div>
                   )}
@@ -544,10 +535,10 @@ export function RoomDialog(props: RoomDialogProps) {
                       onClick={() => toggleRule(rule.id)}
                     >
                       <h5 class="font-bold text-sm">
-                        {t(`rule_${rule.id}_name` as any)}
+                        {t(`rule_${rule.id}_name`)}
                       </h5>
                       <p class="text-xs text-gray-500 leading-snug">
-                        {t(`rule_${rule.id}_desc` as any)}
+                        {t(`rule_${rule.id}_desc`)}
                       </p>
                     </div>
                   )}
@@ -601,15 +592,20 @@ export function RoomDialog(props: RoomDialogProps) {
             <h4 class="text-lg mb-3">{t("chooseDeck")}</h4>
             <ul class="grid w-full grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2 md:grid-cols-1 min-h-0 max-h-75dvh md:max-h-155 overflow-auto scrollbar-thin-hover">
               <For
-                each={availableDecks()}
+                each={matchingDecks()}
                 fallback={
-                  <li class="text-gray-500">{t("noDeckForProfile")}</li>
+                  <li class="text-gray-500">
+                    {deckSize() === CIRCULATION_DECK_CARD_COUNT
+                      ? t("noCirculationDeckForProfile")
+                      : t("noDeckForProfile")}
+                  </li>
                 }
               >
                 {(deck) => (
                   <li>
                     <SelectableDeckInfo
-                      {...deck}
+                      characters={deck.characters}
+                      name={deck.name}
                       checked={selectedDeck() === deck.id}
                       onChange={(e) =>
                         e.target.checked && setSelectedDeck(deck.id)
@@ -635,13 +631,13 @@ export function RoomDialog(props: RoomDialogProps) {
             class="btn btn-solid-green"
             onClick={enterRoom}
             disabled={
-              selectedDeck() === null ||
+              !selectedDeckInfo() ||
               entering() ||
               loadingDecks() ||
               !profile()
             }
           >
-            {selectedDeck() === null
+            {!selectedDeckInfo()
               ? t("selectDeckFirst")
               : entering()
                 ? t("joiningRoom")

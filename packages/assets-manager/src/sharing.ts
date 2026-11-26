@@ -13,8 +13,16 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import type { Deck } from "@gi-tcg/typings";
+import {
+  CIRCULATION_DECK_CARD_COUNT,
+  STANDARD_DECK_CARD_COUNT,
+  type Deck,
+} from "@gi-tcg/typings";
 import shareIdMap from "./data/share_id.json";
+
+const CIRCULATION_SHARE_PREFIX = "C24:";
+const CIRCULATION_PADDING_COUNT =
+  STANDARD_DECK_CARD_COUNT - CIRCULATION_DECK_CARD_COUNT;
 /**
  * 标记为“国服”的为经过测试只在国服生效的屏蔽词
  * 标记为“亚服”的为经过测试只在亚服生效的屏蔽词
@@ -312,6 +320,10 @@ function idToShareId(id: number): number {
  */
 export function staticEncode(deck: Deck) {
   const raw = [...deck.characters, ...deck.cards].map(idToShareId);
+  if (deck.characters.length === 3 && deck.cards.length === CIRCULATION_DECK_CARD_COUNT) {
+    const padding = Array<number>(CIRCULATION_PADDING_COUNT).fill(0);
+    return CIRCULATION_SHARE_PREFIX + encodeRaw([...raw, ...padding]);
+  }
   return encodeRaw(raw);
 }
 
@@ -321,9 +333,18 @@ export function staticEncode(deck: Deck) {
  * @returns 解析得到的牌组（卡牌定义 id）
  */
 export function staticDecode(src: string) {
-  const raw = decodeRaw(src).map(shareIdToId);
+  const code = src.trim();
+  const circulation = code.startsWith(CIRCULATION_SHARE_PREFIX);
+  let raw = decodeRaw(circulation ? code.slice(CIRCULATION_SHARE_PREFIX.length) : code);
+  if (circulation) {
+    if (raw.slice(-CIRCULATION_PADDING_COUNT).some((id) => id !== 0)) {
+      throw new Error("Invalid Circulation sharing code");
+    }
+    raw = raw.slice(0, -CIRCULATION_PADDING_COUNT);
+  }
+  const ids = raw.map(shareIdToId);
   return {
-    characters: raw.slice(0, 3),
-    cards: raw.slice(3),
+    characters: ids.slice(0, 3),
+    cards: ids.slice(3),
   };
 }

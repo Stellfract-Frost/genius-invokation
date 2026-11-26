@@ -13,7 +13,13 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import { DiceType, type DiceRequirement } from "@gi-tcg/typings";
+import {
+  CIRCULATION_DECK_CARD_COUNT,
+  STANDARD_DECK_CARD_COUNT,
+  DiceType,
+  type DeckCardCount,
+  type DiceRequirement,
+} from "@gi-tcg/typings";
 import type { GameState } from "./base/state";
 import type { ExtensionDefinition } from "./base/extension";
 import type { SkillDefinition } from "./base/skill";
@@ -42,7 +48,7 @@ export type RoomRuleId =
   | "regeneration"
   /** 增费：每回合开始获得 1 个万能元素骰 */
   | "extraDie"
-  /** 膨胀：双方角色生命上限与当前生命翻倍 */
+  /** 膨胀：双方角色初始生命上限与当前生命变为原值的 1.5 倍，向下取整 */
   | "doubleHealth"
   /** 疲劳：技能用过一次后费用 +1（上限 +1） */
   | "skillFatigue"
@@ -52,7 +58,7 @@ export type RoomRuleId =
   | "restraint"
   /** 禁疗：治疗量归零（复活除外） */
   | "noHeal"
-  /** 禁忌：开局双方牌库随机塞入 6 张「禁忌知识」 */
+  /** 禁忌：开局在双方牌库中各均匀塞入 6 张「禁忌知识」 */
   | "forbiddenKnowledge";
 
 export type RoomRulePolarity = "buff" | "debuff" | "special";
@@ -69,13 +75,13 @@ export const ROOM_RULES: readonly RoomRuleMeta[] = [
     id: "circulation",
     name: "运转",
     description:
-      "牌库变为 24 张，每回合抽 5 张。回合结束时，未打出的手牌（秘传除外）进入弃牌堆。牌库抽空时洗回弃牌堆。第 n 回合，每名玩家首次抽空自己的牌库时，额外将（n−1）张「禁忌知识」均匀塞入自己的牌库。",
+      "须使用 24 张行动牌的运转牌组。回合结束时，秘传牌和角色衍生牌留在手中，其余手牌进入弃牌堆，然后抽 5 张。每名玩家每回合第 n 次抽空自己的牌库时，先在弃牌堆生成（n−1）张「禁忌知识」，再把弃牌堆洗回牌库，将禁忌知识均匀分布。双方独立计数，每回合重置。",
     polarity: "special",
   },
   {
     id: "chaos",
     name: "混沌",
-    description: "每回合随机获得一个正面规则，且不会重复；全部用完后重新开启一轮。",
+    description: "每回合随机启用一个可在回合中生效的增益规则。每种增益在抽完一轮前只会出现一次。",
     polarity: "special",
   },
   {
@@ -106,7 +112,7 @@ export const ROOM_RULES: readonly RoomRuleMeta[] = [
   {
     id: "doubleHealth",
     name: "膨胀",
-    description: "双方所有角色的生命上限翻倍，当前生命同步翻倍。",
+    description: "双方所有角色的初始生命上限和当前生命变为原值的 1.5 倍，向下取整。",
     polarity: "buff",
   },
   {
@@ -138,7 +144,7 @@ export const ROOM_RULES: readonly RoomRuleMeta[] = [
   {
     id: "forbiddenKnowledge",
     name: "禁忌",
-    description: "对局开始时，双方牌库中随机塞入 6 张「禁忌知识」。",
+    description: "对局开始时，在双方牌库中各均匀塞入 6 张「禁忌知识」。",
     polarity: "debuff",
   },
 ];
@@ -151,9 +157,15 @@ export function isRoomRuleId(value: unknown): value is RoomRuleId {
   return typeof value === "string" && ROOM_RULE_MAP.has(value);
 }
 
-/** 混沌抽取池：只有正面规则 */
+export function getRoomDeckCardCount(rules: readonly string[] = []): DeckCardCount {
+  return rules.includes("circulation")
+    ? CIRCULATION_DECK_CARD_COUNT
+    : STANDARD_DECK_CARD_COUNT;
+}
+
+/** 混沌抽取池：膨胀只在创建初始角色状态时生效。 */
 export const CHAOS_POOL: readonly RoomRuleId[] = ROOM_RULES.filter(
-  (rule) => rule.polarity === "buff",
+  (rule) => rule.polarity === "buff" && rule.id !== "doubleHealth",
 ).map((rule) => rule.id);
 
 /** 混沌里「抽牌」的回合版效果：立即抽 2 张，而不是把开局手牌改成 7 张 */
@@ -224,8 +236,11 @@ export interface RoomRuleRuntimeState {
    * 下标 0/1 对应玩家，回合开始时清空，双方互不影响。
    */
   readonly usedSkills: readonly [readonly number[], readonly number[]];
-  /** 双方上次因「运转」抽空牌库而加入禁忌知识的回合。 */
-  readonly circulationRefillRounds?: readonly [number, number];
+  /** 「运转」中同一回合双方各自抽空牌库的次数。 */
+  readonly circulationRefills?: {
+    readonly roundNumber: number;
+    readonly counts: readonly [number, number];
+  };
 }
 
 const DEFAULT_RUNTIME_STATE: RoomRuleRuntimeState = {
@@ -233,7 +248,6 @@ const DEFAULT_RUNTIME_STATE: RoomRuleRuntimeState = {
   chaosActive: null,
   playedCards: [0, 0],
   usedSkills: [[], []],
-  circulationRefillRounds: [0, 0],
 };
 
 /** 规则状态载体 extension 的保留 id，避开数据层定义 */
