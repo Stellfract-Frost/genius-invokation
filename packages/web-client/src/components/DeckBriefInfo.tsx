@@ -22,7 +22,6 @@ import { useAuth } from "../auth";
 import { copyShareCode, getErrorMessage } from "../utils";
 import { useI18n } from "../i18n";
 import { CIRCULATION_DECK_CARD_COUNT } from "@gi-tcg/typings";
-import { COMPETITION_PROFILE_ID } from "@gi-tcg/core";
 import { getDeckVersionKey } from "../deckVersions";
 
 export interface DeckInfoProps extends DeckInfo {
@@ -58,10 +57,7 @@ export function DeckBriefInfo(props: DeckInfoProps) {
   const navigate = useNavigate();
   const { status } = useAuth();
   const [, { removeGuestDeck }] = useGuestDecks();
-  const versionText = () => {
-    const key = getDeckVersionKey(props.versions);
-    return key === COMPETITION_PROFILE_ID ? t("competitionVersion") : key || t("deckVersionDefault");
-  };
+  const versionText = () => getDeckVersionKey(props.versions) || t("deckVersionDefault");
   const circulation = () => props.cards.length === CIRCULATION_DECK_CARD_COUNT;
 
   const viewDeck = (e: MouseEvent) => {

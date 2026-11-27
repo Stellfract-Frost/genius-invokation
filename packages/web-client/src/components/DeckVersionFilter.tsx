@@ -1,5 +1,4 @@
 import { createMemo, For } from "solid-js";
-import { COMPETITION_PROFILE_ID } from "@gi-tcg/core";
 import type { DeckInfo } from "../pages/Decks";
 import { getDeckVersionKey } from "../deckVersions";
 import { useI18n } from "../i18n";
@@ -26,7 +25,7 @@ export function DeckVersionFilter(props: {
       <option value={ALL_DECK_VERSIONS}>{t("allDeckVersions")}</option>
       <For each={versions()}>
         {(version) => (
-          <option value={version}>{version === COMPETITION_PROFILE_ID ? t("competitionVersion") : version || t("deckVersionDefault")}</option>
+          <option value={version}>{version || t("deckVersionDefault")}</option>
         )}
       </For>
     </select>

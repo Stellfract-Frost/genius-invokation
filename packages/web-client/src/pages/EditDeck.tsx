@@ -91,8 +91,7 @@ export default function EditDeck() {
   );
   const [previewVersions, setPreviewVersions] = createSignal<string[]>([]);
   const [draftVersions, setDraftVersions] = createSignal<string[]>([]);
-  const previewVersion = () => getDeckVersionKey(previewVersions());
-  const isCompetition = () => previewVersion() === COMPETITION_PROFILE_ID;
+  const isCompetition = () => previewVersions().length > 1;
   const [competition, { refetch: retryCompetition }] = createResource(
     isCompetition,
     () => axios.get<ProfileDetail>(`profiles/${COMPETITION_PROFILE_ID}`).then(({ data }) => data),
@@ -276,9 +275,7 @@ export default function EditDeck() {
     }
   };
 
-  const selectedVersions = () => isCompetition()
-    ? t("competitionVersion")
-    : previewVersion() || t("deckVersionDefault");
+  const selectedVersions = () => getDeckVersionKey(previewVersions()) || t("deckVersionDefault");
 
   return (
     <Layout fitViewport>
@@ -358,7 +355,11 @@ export default function EditDeck() {
           <button
             type="button"
             aria-haspopup="dialog"
-            class="flex-1 sm:flex-initial min-w-0 sm:max-w-[32rem] truncate text-left h-9 rounded-md border border-slate-300 px-2"
+            class="min-w-0 max-w-full sm:max-w-[32rem] min-h-9 max-h-20 overflow-y-auto break-words text-left rounded-md border border-slate-300 px-2 py-1"
+            classList={{
+              "w-full sm:w-auto": previewVersions().length > 2,
+              "flex-1 sm:flex-initial": previewVersions().length <= 2,
+            }}
             title={selectedVersions()}
             onClick={() => {
               setDraftVersions([...previewVersions()]);
@@ -385,7 +386,7 @@ export default function EditDeck() {
           <Match when={status().type !== "notLogin"}>
             <DeckBuilder
               class="w-full min-h-0 flex-1"
-              assetsManager={assetsManager(previewDetail() ?? (previewVersion() || undefined))}
+              assetsManager={assetsManager(previewDetail() ?? previewVersions()[0])}
               hideVersionSelect
               characterBlacklist={previewDetail()?.deck?.blacklist}
               locale={locale()}

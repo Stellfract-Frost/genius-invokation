@@ -41,19 +41,20 @@ import { useAuth } from "../auth";
 import { useGuestDecks, useGuestInfo } from "../guest";
 import type { ProfileList, ProfileSummary } from "../profiles";
 import { useI18n } from "../i18n";
-import { getDeckVersionKey } from "../deckVersions";
+import { getDeckVersionKey, getDeckVersions } from "../deckVersions";
 
 function SelectableDeckInfo(
-  props: Pick<DeckInfoProps, "characters" | "name"> &
+  props: Pick<DeckInfoProps, "characters" | "name" | "versions"> &
     JSX.InputHTMLAttributes<HTMLInputElement>,
 ) {
-  const { assetsManager } = useI18n();
+  const { assetsManager, t } = useI18n();
   const [deckInfo, inputProps] = splitProps(props, [
     "characters",
     "name",
+    "versions",
   ]);
   return (
-    <label class="relative group cursor-pointer min-w-15 w-full">
+    <label class="relative group block cursor-pointer min-w-0 w-full">
       <input
         type="radio"
         hidden
@@ -61,12 +62,12 @@ function SelectableDeckInfo(
         name="createRoomDeck"
         {...inputProps}
       />
-      <div class="pl-10 pr-4 flex flex-row">
+      <div class="pl-8 pr-2">
         <div class="flex flex-row items-center gap-1">
           <For each={deckInfo.characters}>
             {(id) => (
               <img
-                class="h-12 w-12 b-2 b-yellow-100 rounded-full"
+                class="h-8 w-8 lg:h-12 lg:w-12 object-contain b-2 b-yellow-100 rounded-full"
                 src={assetsManager().getImageUrlSync(id, {
                   type: "icon",
                 })}
@@ -75,13 +76,16 @@ function SelectableDeckInfo(
           </For>
         </div>
       </div>
-      <div class="pl-8 pb-1 text-yellow-800 peer-checked:text-yellow-100 transition-colors">
+      <div class="pl-8 pr-2 py-1 break-words text-yellow-800 peer-checked:text-yellow-100 transition-colors">
         {deckInfo.name}
+        <div class="text-xs tabular-nums">
+          {t("deckVersionShort")} · {getDeckVersionKey(deckInfo.versions) || t("deckVersionDefault")}
+        </div>
       </div>
-      <div class="absolute bottom-7 left-0 hidden peer-checked:flex text-6 line-height-6 w-8 h-8  items-center justify-center text-red bg-white b-yellow-800 b-2 rounded-full">
+      <div class="absolute top-3 left-0 hidden peer-checked:flex text-5 line-height-5 w-7 h-7 items-center justify-center text-red bg-white b-yellow-800 b-2 rounded-full">
         &#10003;
       </div>
-      <div class="absolute bottom-0 left-4 right-1 h-12 bg-white border-yellow-800 b-1 group-hover:bg-yellow-100 group-[_]:peer-checked:bg-yellow-800 rounded-lg z--1 transition-colors" />
+      <div class="absolute top-5 bottom-0 left-4 right-1 bg-white border-yellow-800 b-1 group-hover:bg-yellow-100 group-[_]:peer-checked:bg-yellow-800 rounded-lg z--1 transition-colors" />
     </label>
   );
 }
@@ -239,10 +243,10 @@ export function RoomDialog(props: RoomDialogProps) {
     if (!editable()) {
       return true;
     }
-    const key = getDeckVersionKey(deck.versions);
+    const versions = getDeckVersions(deck.versions);
     const selected = profile();
-    if (key) {
-      return selected?.id === (key === COMPETITION_PROFILE_ID ? key : `official/${key}`);
+    if (versions.length > 0) {
+      return selected?.id === (versions.length > 1 ? COMPETITION_PROFILE_ID : `official/${versions[0]}`);
     }
     return selected?.id === profiles()?.defaultProfileId || selected?.id.startsWith("official/") === false;
   }));
@@ -488,6 +492,7 @@ export function RoomDialog(props: RoomDialogProps) {
                         <SelectableDeckInfo
                           characters={deck.characters}
                           name={deck.name}
+                          versions={deck.versions}
                           checked={selectedDeck() === deck.id}
                           onChange={(event) => event.currentTarget.checked && setSelectedDeck(deck.id)}
                         />
