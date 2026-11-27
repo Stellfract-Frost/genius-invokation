@@ -16,13 +16,15 @@
 import { For, Show, createEffect } from "solid-js";
 import type { AllCardsProps } from "./AllCards";
 import { DeckCard, TinyActionCard, TinyCharacterCard } from "./Card";
+import { useDeckBuilderContext } from "./DeckBuilder";
 import { createStore, produce } from "solid-js/store";
 import type {
   DeckDataActionCardInfo,
   DeckDataCharacterInfo,
 } from "@gi-tcg/assets-manager";
 
-export function CurrentDeck(props: AllCardsProps) {
+export function CurrentDeck(props: AllCardsProps & { onExpand: () => void }) {
+  const { t } = useDeckBuilderContext();
   const [current, setCurrent] = createStore({
     characters: Array.from(
       { length: 3 },
@@ -75,49 +77,26 @@ export function CurrentDeck(props: AllCardsProps) {
   };
 
   return (
-    // <div
-    //   class="flex-shrink-0 flex flex-col flex-grow items-center justify-center gap-1 data-[deck-page]:gap-3 @3xl:gap-3"
-    //   bool:data-deck-page={deckPage()}
-    // >
     <div
-      // the DP:max-h-[calc(100%-25px)] is calculated by subtracting b-t-1 of split line, mt-3 of split line, h-3 of toggle button and mb-2 of toggle button
-      class={`relative min-w-0
-        hidden @3xl:flex DP:flex flex-col justify-start
-        w-full @3xl:w-auto DP:w-auto
-        flex-shrink-0 @3xl:flex-shrink-1
-        DP:flex-1 DP:self-center DP:max-h-[calc(100%-33px)]
-        @3xl:aspect-[4/7] DP:aspect-[4/7]
-        @3xl:h-full DP:h-[calc(100%-33px)]
-        @3xl:max-w-100 DP:max-w-[min(100%,25rem)]`}
+      role="region"
+      aria-label={t("currentDeck")}
+      class="deck-selection"
     >
-      <div 
-        class={`relative
-          @3xl:aspect-[4/7] DP:aspect-[4/7]
-          w-full h-auto max-h-full
-          flex flex-col items-center
-          DP:px-2% DP:py-2% @3xl:px-2 @3xl:py-3.5`}
-      >
-        <ul
-          class={`flex justify-between gap-3 @3xl:w-[75%] DP:w-[75%] mb-2 @3xl:mb-2% DP:mb-2%`}
-        >
+      <div class="deck-selection-header">
+        <ul aria-label={t("characters")} class="deck-selection-characters">
           <For each={current.characters}>
             {(ch, idx) => (
               <li
-                class={`relative z-20 @3xl:z-0
-                  aspect-square w-10 h-10 flex-shrink-0
-                  min-w-10
-                  @3xl:w-auto DP:w-auto
-                  @3xl:h-auto DP:h-auto
-                  @3xl:aspect-[7/12] DP:aspect-[7/12]
-                  @3xl:flex-1 DP:flex-1`}
+                class="min-w-0"
                 onClick={() => ch && removeCharacter(idx())}
               >
                 <Show
                   when={ch}
                   fallback={
-                    <div class="w-full b-gray-3 border-2 overflow-clip rounded-full @3xl:rounded-xl DP:rounded-xl">
-                      <div class="w-full aspect-square @3xl:aspect-[7/12] DP:aspect-[7/12] bg-gray-200" />
-                    </div>
+                    <div
+                      aria-hidden="true"
+                      class="deck-selection-placeholder aspect-square rounded-full DP:aspect-[7/12] DP:rounded-xl @3xl:aspect-[7/12] @3xl:rounded-xl"
+                    />
                   }
                 >
                   {(ch) => (
@@ -139,49 +118,50 @@ export function CurrentDeck(props: AllCardsProps) {
             )}
           </For>
         </ul>
-        <ul
-          class={`grid w-full
-          grid-cols-15
-          @3xl:grid-cols-6 DP:grid-cols-6
-          gap-x-0 gap-y-1
-          @3xl:gap-x-1.5% @3xl:gap-y-0.5% DP:gap-x-1.5% DP:gap-y-0.5%
-          pr-[calc(100%-calc(calc(100%-2rem)/14*15))]
-          @3xl:pr-0 DP:pr-0`}
+        <button
+          type="button"
+          class="@3xl:hidden DP:hidden shrink-0 rounded-lg b-1 px-2 h-7 text-sm"
+          onClick={props.onExpand}
         >
-          <For each={current.cards}>
-            {(ac, idx) => (
-              <li
-                class={`relative z-20 @3xl:z-0 aspect-[7/12] min-w-8 @3xl:w-full DP:w-full`}
-                onClick={() => ac && removeActionCard(idx())}
-              >
-                <Show
-                  when={ac}
-                  fallback={
-                    <div class="w-full b-gray-3! border-2 overflow-clip rounded-md @3xl:rounded-lg DP:rounded-lg">
-                      <div class="w-full aspect-ratio-[7/12] bg-gray-200" />
-                    </div>
-                  }
-                >
-                  {(ac) => (
-                    <>
-                      <DeckCard
-                        class="rounded-lg hidden @3xl:block DP:block"
-                        id={ac().id}
-                        type="actionCard"
-                        warn={ac().version > props.version}
-                      />
-                      <TinyActionCard
-                        id={ac().id}
-                        warn={ac().version > props.version}
-                      />
-                    </>
-                  )}
-                </Show>
-              </li>
-            )}
-          </For>
-        </ul>
+          {t("currentDeck")}
+        </button>
       </div>
+      <ul aria-label={t("actionCards")} class="deck-selection-actions">
+        <For each={current.cards}>
+          {(ac, idx) => (
+            <li
+              bool:data-preview={ac !== null || idx() < 6}
+              class="aspect-[7/12] min-w-0"
+              onClick={() => ac && removeActionCard(idx())}
+            >
+              <Show
+                when={ac}
+                fallback={
+                  <div
+                    aria-hidden="true"
+                    class="deck-selection-placeholder aspect-[7/12] rounded-md @3xl:rounded-lg DP:rounded-lg"
+                  />
+                }
+              >
+                {(ac) => (
+                  <>
+                    <DeckCard
+                      class="rounded-lg hidden @3xl:block DP:block"
+                      id={ac().id}
+                      type="actionCard"
+                      warn={ac().version > props.version}
+                    />
+                    <TinyActionCard
+                      id={ac().id}
+                      warn={ac().version > props.version}
+                    />
+                  </>
+                )}
+              </Show>
+            </li>
+          )}
+        </For>
+      </ul>
     </div>
   );
 }

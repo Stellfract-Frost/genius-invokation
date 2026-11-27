@@ -18,8 +18,6 @@ import {
   Switch,
   Match,
   createResource,
-  createSignal,
-  onCleanup,
 } from "solid-js";
 import { useDeckBuilderContext } from "./DeckBuilder";
 import BrowseIcon from "./Browse.svg";
@@ -33,7 +31,7 @@ export interface CardProps {
 }
 
 export function Card(props: CardProps) {
-  const { assetsManager, showCard } = useDeckBuilderContext();
+  const { assetsManager, showCard, t } = useDeckBuilderContext();
 
   const [url] = createResource(() =>
     assetsManager().getImageUrl(props.id, { thumbnail: true }),
@@ -58,15 +56,6 @@ export function Card(props: CardProps) {
         />
       </Show>
       <div
-        class="absolute left-0 top-0 bg-gray-500/90 h-25% w-full items-center justify-center hidden group-hover:flex"
-        onClick={(e) => {
-          e.stopPropagation();
-          showCard(e, props.type, props.id);
-        }}
-      >
-        <img src={BrowseIcon} draggable="false" class="w-35% h-auto" />
-      </div>
-      <div
         class="absolute inset-0 z-100 bg-transparent @3xl:hidden"
         onContextMenu={(e) => e.preventDefault()}
         data-long-press-delay="400"
@@ -74,16 +63,20 @@ export function Card(props: CardProps) {
           e.preventDefault();
           showCard(e, props.type, props.id);
         }}
-        onClick={(e) => {
-          // 透明层盖在卡面上，手机端点不到下面 hover 才出现的放大镜。
-          // 命中卡面上方 25%（放大镜区域）时按放大镜处理，其余区域让事件冒泡去选中/取消。
-          const rect = e.currentTarget.getBoundingClientRect();
-          if (e.clientY - rect.top <= rect.height * 0.25) {
-            e.stopPropagation();
-            showCard(e, props.type, props.id);
-          }
-        }}
       />
+      <button
+        type="button"
+        class="absolute left-0 top-0 z-101 flex h-25% w-full items-center justify-center @3xl:bg-gray-500/90 @3xl:opacity-0 @3xl:group-hover:opacity-100 focus-visible:opacity-100"
+        aria-label={t("viewCardDetails", { name: name() ?? props.id })}
+        onClick={(e) => {
+          e.stopPropagation();
+          showCard(e, props.type, props.id);
+        }}
+      >
+        <span class="grid place-items-center w-6 h-6 rounded-full bg-black/60 @3xl:bg-transparent">
+          <img alt="" src={BrowseIcon} draggable="false" class="w-4 h-auto" />
+        </span>
+      </button>
     </div>
   );
 }
@@ -99,7 +92,7 @@ export function PoolCard(props: PoolCardProps) {
   const { t } = useDeckBuilderContext();
   return (
     <div
-      class="pool-card w-full aspect-[7/12] rounded-lg overflow-clip b-[var(--border-color)] b-2 relative"
+      class="pool-card w-full aspect-[7/12] rounded-lg overflow-clip b-[var(--border-color)] b-2 relative isolate"
       bool:data-selected={props.selected}
       bool:data-partial-selected={props.partialSelected}
       bool:data-invalid={props.valid === false}
@@ -149,7 +142,7 @@ export interface DeckCardProps extends CardProps {
 export function DeckCard(props: DeckCardProps) {
   return (
     <div
-      class={`w-full overflow-clip b-gray-500 b-2 relative group ${
+      class={`w-full overflow-clip b-gray-500 b-2 relative isolate group ${
         props.class ?? ""
       }`}
     >
@@ -178,19 +171,27 @@ export interface TinyCardProps {
 }
 
 export function TinyCharacterCard(props: TinyCardProps) {
-  const { assetsManager } = useDeckBuilderContext();
+  const { assetsManager, showCard, t } = useDeckBuilderContext();
 
   const [url] = createResource(() =>
     assetsManager().getImageUrl(props.id, { type: "icon", thumbnail: true }),
   );
 
   return (
-    <div class="@3xl:hidden DP:hidden w-full h-full rounded-full overflow-clip b-gray-500 border-2 relative group">
+    <button
+      type="button"
+      class="block @3xl:hidden DP:hidden w-full aspect-square rounded-full overflow-clip b-gray-500 border-2 relative"
+      aria-label={t("viewCardDetails", { name: assetsManager().getNameSync(props.id) ?? props.id })}
+      onClick={(e) => {
+        e.stopPropagation();
+        showCard(e, "character", props.id);
+      }}
+    >
       <Show
         when={url.state === "ready"}
         fallback={<div class="w-full h-full bg-gray-200" />}
       >
-        <img src={url()} draggable="false" class="w-full object-cover" />
+        <img alt="" src={url()} draggable="false" class="w-full object-cover" />
       </Show>
       <div
         class={`absolute inset-0 data-[warn]:block hidden pointer-events-none 
@@ -199,24 +200,32 @@ export function TinyCharacterCard(props: TinyCardProps) {
       >
         &#9888;
       </div>
-    </div>
+    </button>
   );
 }
 
 export function TinyActionCard(props: TinyCardProps) {
-  const { assetsManager } = useDeckBuilderContext();
+  const { assetsManager, showCard, t } = useDeckBuilderContext();
 
   const [url] = createResource(() =>
     assetsManager().getImageUrl(props.id, { thumbnail: true }),
   );
 
   return (
-    <div class="@3xl:hidden DP:hidden w-full rounded-md overflow-clip b-gray-500 border-2 relative group">
+    <button
+      type="button"
+      class="block @3xl:hidden DP:hidden w-full aspect-[7/12] rounded-md overflow-clip b-gray-500 border-2 relative"
+      aria-label={t("viewCardDetails", { name: assetsManager().getNameSync(props.id) ?? props.id })}
+      onClick={(e) => {
+        e.stopPropagation();
+        showCard(e, "actionCard", props.id);
+      }}
+    >
       <Show
         when={url.state === "ready"}
         fallback={<div class="w-full aspect-ratio-[7/12] bg-gray-200" />}
       >
-        <img src={url()} draggable="false" class="w-full object-cover" />
+        <img alt="" src={url()} draggable="false" class="w-full object-cover" />
       </Show>
       <div
         class={`absolute inset-0 data-[warn]:block hidden pointer-events-none 
@@ -225,6 +234,6 @@ export function TinyActionCard(props: TinyCardProps) {
       >
         &#9888;
       </div>
-    </div>
+    </button>
   );
 }

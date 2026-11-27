@@ -30,7 +30,6 @@ export interface AllCardsProps extends DeckData {
   onChangeDeck?: (deck: Deck) => void;
   onSwitchTab?: (tab: number) => void;
   onSetVersion?: (version: number) => void;
-  onShowDeck?: () => void;
 }
 
 export function AllCards(props: AllCardsProps) {
@@ -56,11 +55,6 @@ export function AllCards(props: AllCardsProps) {
         >
           {t("actionCards")}
         </button>
-        <Show when={props.onShowDeck}>
-          <button type="button" class="@3xl:hidden ml-auto h-8 rounded-lg b-1 px-2 text-sm" onClick={props.onShowDeck}>
-            {t("currentDeck")}
-          </button>
-        </Show>
         <Show when={!props.hideVersionSelect}>
         <Show
           when={!props.versionSpecified}

@@ -24,7 +24,7 @@ export default defineConfig({
   presets: [presetWind3()],
   variants: [
     ...Object.entries({
-      DP: ".gi-tcg-deck-builder:has(.deck-page-control:checked)",
+      DP: ".gi-tcg-deck-builder > [data-deck-expanded]",
       FM: ".filter-bar:has(> .filter-menu-control:checked)",
     }).map<Variant>(([prefix, scope]) => {
       return (matcher) => {

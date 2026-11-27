@@ -18,7 +18,6 @@ import {
   createContext,
   splitProps,
   useContext,
-  untrack,
   createSignal,
   createEffect,
   createMemo,
@@ -26,8 +25,6 @@ import {
   createResource,
   Switch,
   Match,
-  createUniqueId,
-  onCleanup,
 } from "solid-js";
 import { AllCards } from "./AllCards";
 import { CurrentDeck } from "./CurrentDeck";
@@ -36,7 +33,6 @@ import { createCardDataViewer } from "@gi-tcg/card-data-viewer";
 import {
   DEFAULT_ASSETS_MANAGER,
   type AssetsManager,
-  type DeckData,
 } from "@gi-tcg/assets-manager";
 import { translations, type Locale } from "./i18n";
 import type { I18nKey } from "./locales";
@@ -76,6 +72,7 @@ export function DeckBuilder(props: DeckBuilderProps) {
     "assetsManager", "locale", "class", "actionCardLimit",
   ]);
   let container!: HTMLDivElement;
+  let detailsDialog!: HTMLDialogElement;
   const assetsManager = createMemo(
     () => local.assetsManager ?? DEFAULT_ASSETS_MANAGER,
   );
@@ -95,6 +92,7 @@ export function DeckBuilder(props: DeckBuilderProps) {
 
   const [cardDataViewerOffsetX, setCardDataViewerOffsetX] = createSignal(0);
   const [cardDataViewerOffsetY, setCardDataViewerOffsetY] = createSignal(0);
+  const [centerDetails, setCenterDetails] = createSignal(false);
   const [showCurrentDeck, setShowCurrentDeck] = createSignal(false);
 
   const [version, setVersion] = createSignal(0);
@@ -112,8 +110,6 @@ export function DeckBuilder(props: DeckBuilderProps) {
     }
   });
 
-  const deckPageControlId = createUniqueId();
-
   return (
     <DeckBuilderContext.Provider
       value={{
@@ -121,17 +117,27 @@ export function DeckBuilder(props: DeckBuilderProps) {
         locale,
         t,
         showCard: (e, type, id) => {
-          const rect = (e.target as HTMLElement).getBoundingClientRect();
-          const containerRect = container.getBoundingClientRect();
-          // 当点击事件发生在靠近左侧位置时，在鼠标右下角显示；否则在左上角显示
-          if (e.type === "long-press") {
-            setCardDataViewerOffsetX((containerRect.width - 300) / 2);
-            if (containerRect.bottom - rect.bottom < 200) {
-              setCardDataViewerOffsetY(0);
-            } else {
-              setCardDataViewerOffsetY(rect.bottom - containerRect.top - 25);
+          const trigger = e.currentTarget as HTMLElement;
+          const modal =
+            window.matchMedia("(pointer: coarse)").matches ||
+            getComputedStyle(trigger).getPropertyValue("--inline-card-details").trim() !== "1";
+          setCenterDetails(modal);
+          if (type === "actionCard") {
+            showCard(id);
+          } else {
+            showCharacter(id);
+          }
+          if (modal) {
+            if (!detailsDialog.open) {
+              detailsDialog.showModal();
             }
-          } else if (rect.left - containerRect.left < 320) {
+            return;
+          }
+
+          const rect = trigger.getBoundingClientRect();
+          const containerRect = container.getBoundingClientRect();
+          // 在左侧卡牌旁边显示，给右侧卡牌的详情留出足够宽度。
+          if (rect.left - containerRect.left < 320) {
             setCardDataViewerOffsetX(
               rect.left + rect.width / 2 - containerRect.left,
             );
@@ -142,11 +148,6 @@ export function DeckBuilder(props: DeckBuilderProps) {
             setCardDataViewerOffsetX(0);
             setCardDataViewerOffsetY(0);
           }
-          if (type === "actionCard") {
-            showCard(id);
-          } else {
-            showCharacter(id);
-          }
         },
       }}
     >
@@ -154,26 +155,12 @@ export function DeckBuilder(props: DeckBuilderProps) {
         class={`gi-tcg-deck-builder @container groupxxx reset ${local.class}`}
         ref={container}
       >
-        <input
-          type="checkbox"
-          id={deckPageControlId}
-          class="deck-page-control"
-          checked={showCurrentDeck()}
-          hidden
-        />
         <div
-          class="w-full h-full flex flex-col @3xl:flex-row items-stretch gap-0 @3xl:gap-3 select-none"
+          class="w-full h-full flex flex-col @3xl:flex-row @3xl:[--inline-card-details:1] items-stretch gap-0 @3xl:gap-3 select-none"
           {...rest}
+          bool:data-deck-expanded={showCurrentDeck()}
           onClick={() => hide()}
         >
-          <Show when={showCurrentDeck()}>
-            <div class="@3xl:hidden flex shrink-0 items-center justify-between mb-2">
-              <span class="font-semibold">{t("currentDeck")}</span>
-              <button type="button" class="h-8 rounded-lg b-1 px-2 text-sm" onClick={() => setShowCurrentDeck(false)}>
-                {t("cardPool")}
-              </button>
-            </div>
-          </Show>
           <Switch>
             <Match when={deckData.loading}>
               <div class="flex-grow">{t("loadingCards")}</div>
@@ -183,32 +170,39 @@ export function DeckBuilder(props: DeckBuilderProps) {
             </Match>
             <Match when={deckData()}>
               {(deckData) => (
-                <AllCards hideVersionSelect={props.hideVersionSelect}
-                  characterBlacklist={props.characterBlacklist}
-                  version={version()}
-                  versionSpecified={versionSpecified()}
-                  deck={props.deck ?? EMPTY_DECK}
-                  actionCardLimit={local.actionCardLimit ?? STANDARD_DECK_CARD_COUNT}
-                  onChangeDeck={props.onChangeDeck}
-                  onSetVersion={setVersion}
-                  onShowDeck={() => setShowCurrentDeck(true)}
-                  {...deckData()}
-                />
+                <>
+                  <Show when={showCurrentDeck()}>
+                    <div class="@3xl:hidden flex shrink-0 items-center justify-between mb-2">
+                      <span class="font-semibold">{t("currentDeck")}</span>
+                      <button type="button" class="h-8 rounded-lg b-1 px-2 text-sm" onClick={() => setShowCurrentDeck(false)}>
+                        {t("cardPool")}
+                      </button>
+                    </div>
+                  </Show>
+                  <AllCards
+                    hideVersionSelect={props.hideVersionSelect}
+                    characterBlacklist={props.characterBlacklist}
+                    version={version()}
+                    versionSpecified={versionSpecified()}
+                    deck={props.deck ?? EMPTY_DECK}
+                    actionCardLimit={local.actionCardLimit ?? STANDARD_DECK_CARD_COUNT}
+                    onChangeDeck={props.onChangeDeck}
+                    onSetVersion={setVersion}
+                    {...deckData()}
+                  />
+                  <div class="hidden @3xl:block b-r-1 b-gray-300" />
+                  <CurrentDeck
+                    version={version()}
+                    deck={props.deck ?? EMPTY_DECK}
+                    actionCardLimit={local.actionCardLimit ?? STANDARD_DECK_CARD_COUNT}
+                    onChangeDeck={props.onChangeDeck}
+                    onExpand={() => setShowCurrentDeck(true)}
+                    {...deckData()}
+                  />
+                </>
               )}
             </Match>
           </Switch>
-          <div class="hidden @3xl:block b-r-1 b-gray-300" />
-          <Show when={deckData()}>
-            {(deckData) => (
-              <CurrentDeck
-                version={version()}
-                deck={props.deck ?? EMPTY_DECK}
-                actionCardLimit={local.actionCardLimit ?? STANDARD_DECK_CARD_COUNT}
-                onChangeDeck={props.onChangeDeck}
-                {...deckData()}
-              />
-            )}
-          </Show>
         </div>
         <div
           class="absolute right-0 bottom-0 pointer-events-none z-50"
@@ -217,8 +211,36 @@ export function DeckBuilder(props: DeckBuilderProps) {
             top: `${cardDataViewerOffsetY()}px`,
           }}
         >
-          <CardDataViewer />
+          <Show when={!centerDetails()}>
+            <CardDataViewer />
+          </Show>
         </div>
+        <dialog
+          ref={detailsDialog}
+          class="card-details-dialog"
+          aria-label={t("cardDetails")}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              detailsDialog.close();
+            }
+          }}
+          onClose={() => {
+            if (!detailsDialog.open) {
+              hide();
+            }
+          }}
+        >
+          <div class="flex justify-end shrink-0 pb-2">
+            <button type="button" autofocus class="h-8 rounded-lg b-1 px-3 text-sm" onClick={() => detailsDialog.close()}>
+              {t("close")}
+            </button>
+          </div>
+          <div class="card-details-content">
+            <Show when={centerDetails()}>
+              <CardDataViewer />
+            </Show>
+          </div>
+        </dialog>
       </div>
     </DeckBuilderContext.Provider>
   );
