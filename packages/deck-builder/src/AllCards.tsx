@@ -38,7 +38,11 @@ export function AllCards(props: AllCardsProps) {
 
   return (
     <div
-      class="min-w-0 min-h-0 flex-1 flex flex-col DP:hidden DP:@3xl:flex"
+      class={`min-w-0 min-h-0 flex-1
+        h-[calc(100cqh-18.5rem)] @3xl:h-full DP:@3xl:h-full
+        flex flex-col
+        DP:hidden DP:h-0
+        @3xl:flex DP:@3xl:flex`}
     >
       <div class="flex flex-row mb-2">
         <button
@@ -56,31 +60,31 @@ export function AllCards(props: AllCardsProps) {
           {t("actionCards")}
         </button>
         <Show when={!props.hideVersionSelect}>
-        <Show
-          when={!props.versionSpecified}
-          fallback={
-            <span class="text-gray-500 ml-2">
-              {t("versionBelow", { version: props.allVersions[props.version] })}
-            </span>
-          }
-        >
-          <select
-            class="flex-grow b-1 rounded-full ml-2! outline-none focus:b-0 focus:bg-blue-100"
-            value={props.version}
-            onChange={(e) => props.onSetVersion?.(Number(e.target.value))}
+          <Show
+            when={!props.versionSpecified}
+            fallback={
+              <span class="text-gray-500 ml-2">
+                {t("versionBelow", { version: props.allVersions[props.version] })}
+              </span>
+            }
           >
-            <Index each={props.allVersions.toReversed()}>
-              {(versionStr, index) => (
-                <option value={props.allVersions.length - 1 - index}>
-                  {versionStr()}
-                </option>
-              )}
-            </Index>
-          </select>
-        </Show>
+            <select
+              class="flex-grow b-1 rounded-full ml-2! outline-none focus:b-0 focus:bg-blue-100"
+              value={props.version}
+              onChange={(e) => props.onSetVersion?.(Number(e.target.value))}
+            >
+              <Index each={props.allVersions.toReversed()}>
+                {(versionStr, index) => (
+                  <option value={props.allVersions.length - 1 - index}>
+                    {versionStr()}
+                  </option>
+                )}
+              </Index>
+            </select>
+          </Show>
         </Show>
       </div>
-      <div class="min-h-0 flex-1">
+      <div class="min-h-0">
         <div
           bool:data-visible={tab() === 0}
           class="h-full hidden data-[visible]:block"

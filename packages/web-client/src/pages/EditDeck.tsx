@@ -42,6 +42,7 @@ import { DEFAULT_ASSETS_MANAGER } from "@gi-tcg/assets-manager";
 import { useNavigate, useParams, useSearchParams } from "@solidjs/router";
 import { DeckBuilder } from "@gi-tcg/deck-builder";
 import "@gi-tcg/deck-builder/style.css";
+import { AutoResizeText } from "@gi-tcg/web-ui-core";
 import { useGuestDecks } from "../guest";
 import { DeckInfo } from "./Decks";
 import { useAuth } from "../auth";
@@ -61,7 +62,7 @@ function VersionOptions(props: {
       <button type="button" class="text-sm underline p-1" onClick={() => props.onChange([])}>
         {t("deckVersionDefault")}
       </button>
-      <div class="grid grid-cols-4 lg:grid-cols-1 gap-1">
+      <div class="grid grid-cols-4 gap-1">
         <For each={VERSIONS.toReversed()}>
           {(version) => (
             <button
@@ -319,25 +320,27 @@ export default function EditDeck() {
 
   return (
     <Layout fitViewport>
-      <div class="mx-auto h-full max-w-screen-2xl flex flex-col gap-2">
-        <div class="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1">
+      <div class="container mx-auto h-full flex flex-col px-2 @container">
+        <div class="flex flex-row flex-wrap items-center gap-1 md:gap-3 mb-3 md:mb-5 min-h-0">
           <TextFieldEdit
             value={deckName()}
             saveText={t("save")}
             cancelText={t("cancel")}
-            class="text-lg md:text-2xl font-bold"
+            class="text-xl md:text-2xl font-bold"
             onSave={saveName}
           />
-          <div class="flex flex-wrap gap-1.5 text-xs sm:text-sm">
-            <button type="button" class="btn btn-outline-blue min-h-8" onClick={importCode} disabled={uploading()}>
+          <div class="flex flex-row flex-1 gap-1 md:gap-3 text-3.2 md:text-3.5">
+            <button type="button" class="btn btn-outline-blue" onClick={importCode} disabled={uploading()}>
               {t("importShareCode")}
             </button>
-            <button type="button" class="btn btn-outline min-h-8" onClick={exportCode} disabled={!valid() || uploading()}>
+            <button type="button" class="btn btn-outline" onClick={exportCode} disabled={!valid() || uploading()}>
               {t("generateShareCode")}
             </button>
             <button
               type="button"
-              class="btn btn-solid-green min-h-8"
+              class="flex-shrink-0 btn btn-solid-green min-w-15 md:min-w-22 max-w-20% py-0 px-1"
+              aria-label={t("saveDeck")}
+              aria-busy={uploading()}
               disabled={!canSave()}
               onClick={async () => {
                 if (await saveDeck() && isNew) {
@@ -345,14 +348,30 @@ export default function EditDeck() {
                 }
               }}
             >
-              {uploading() ? t("loading") : uploadDone() ? t("deckSaved") : t("saveDeck")}
+              <Switch>
+                <Match when={uploading()}>
+                  <i class="i-mdi-loading animate-spin" />
+                </Match>
+                <Match when={uploadDone()}>
+                  <i class="i-mdi-check" />
+                </Match>
+                <Match when={true}>
+                  <AutoResizeText minFontSize={10}>{t("saveDeck")}</AutoResizeText>
+                </Match>
+              </Switch>
             </button>
-            <button type="button" class="btn btn-ghost-red min-h-8" onClick={navigateBack} disabled={uploading()}>
-              {t("back")}
+            <span class="flex-grow" />
+            <button
+              type="button"
+              class="flex-shrink-0 btn btn-outline-red min-w-15 max-w-20% py-0 px-1"
+              onClick={navigateBack}
+              disabled={uploading()}
+            >
+              <AutoResizeText minFontSize={10}>{t("back")}</AutoResizeText>
             </button>
           </div>
         </div>
-        <div class="flex shrink-0 flex-wrap items-center gap-2 text-sm">
+        <div class="flex shrink-0 flex-wrap items-center gap-2 mb-2 text-sm">
           <select
             aria-label={t("deckMode")}
             class="h-9 rounded-md border border-slate-300 px-2"
@@ -377,7 +396,7 @@ export default function EditDeck() {
           <button
             type="button"
             aria-haspopup="dialog"
-            class="lg:hidden flex-1 min-w-0 truncate text-left h-9 rounded-md border border-slate-300 px-2"
+            class="flex-1 sm:flex-initial min-w-0 sm:max-w-[32rem] truncate text-left h-9 rounded-md border border-slate-300 px-2"
             title={selectedVersions()}
             onClick={() => {
               setDraftVersions([...previewVersions()]);
@@ -386,48 +405,37 @@ export default function EditDeck() {
           >
             {t("deckVersionShort")} · {selectedVersions()}
           </button>
-          <span class="hidden lg:block min-w-0 truncate text-slate-600">{selectedVersions()}</span>
           <Show when={previewState() === "loading"}>
             <span role="status" class="text-xs text-slate-600">{t("loading")}</span>
           </Show>
         </div>
-        <div class="min-h-0 flex-1 flex gap-3">
-          <aside class="hidden lg:flex shrink-0 w-26 flex-col gap-2 border-r border-slate-200 pr-2 min-h-0">
-            <h3 class="font-semibold">{t("deckVersion")}</h3>
-            <div class="flex-1 overflow-y-auto pr-1">
-              <VersionOptions versions={previewVersions} onChange={changeVersions} />
-            </div>
-          </aside>
-          <div class="min-w-0 min-h-0 flex-1">
-            <Switch>
-              <Match when={userDeckData.loading || previewState() === "loading"}>{t("loading")}</Match>
-              <Match when={status().type !== "guest" && userDeckData.error}>
-                {t("loadFailed", { message: getErrorMessage(userDeckData.error) })}
-              </Match>
-              <Match when={previewState() === "error"}>
-                {t("deckVersionLoadFailed")}
-                <button type="button" class="ml-2 underline" onClick={() => setPreviewVersions([...previewVersions()])}>
-                  {t("retry")}
-                </button>
-              </Match>
-              <Match when={status().type !== "notLogin"}>
-                <DeckBuilder
-                  class="w-full h-full"
-                  assetsManager={assetsManager(previewDetail() ?? previewSingle() ?? undefined)}
-                  hideVersionSelect
-                  characterBlacklist={previewDetail()?.deck?.blacklist}
-                  locale={locale()}
-                  deck={deckValue()}
-                  actionCardLimit={deckSize()}
-                  onChangeDeck={(deck) => {
-                    setDeckValue(deck);
-                    setDirty(true);
-                  }}
-                />
-              </Match>
-            </Switch>
-          </div>
-        </div>
+        <Switch>
+          <Match when={userDeckData.loading || previewState() === "loading"}>{t("loading")}</Match>
+          <Match when={status().type !== "guest" && userDeckData.error}>
+            {t("loadFailed", { message: getErrorMessage(userDeckData.error) })}
+          </Match>
+          <Match when={previewState() === "error"}>
+            {t("deckVersionLoadFailed")}
+            <button type="button" class="ml-2 underline" onClick={() => setPreviewVersions([...previewVersions()])}>
+              {t("retry")}
+            </button>
+          </Match>
+          <Match when={status().type !== "notLogin"}>
+            <DeckBuilder
+              class="w-full min-h-0 flex-1"
+              assetsManager={assetsManager(previewDetail() ?? previewSingle() ?? undefined)}
+              hideVersionSelect
+              characterBlacklist={previewDetail()?.deck?.blacklist}
+              locale={locale()}
+              deck={deckValue()}
+              actionCardLimit={deckSize()}
+              onChangeDeck={(deck) => {
+                setDeckValue(deck);
+                setDirty(true);
+              }}
+            />
+          </Match>
+        </Switch>
       </div>
       <dialog ref={versionDialog} aria-label={t("deckVersion")} class="deck-editor-dialog m-auto w-[min(94vw,28rem)] rounded-xl bg-white p-4 shadow-xl">
         <h3 class="font-bold text-lg">{t("deckVersion")}</h3>

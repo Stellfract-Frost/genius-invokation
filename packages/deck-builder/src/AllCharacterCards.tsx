@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import { createEffect, createMemo, createSignal } from "solid-js";
+import { createEffect, createSignal } from "solid-js";
 import { PoolCard } from "./Card";
 import type { AllCardsProps } from "./AllCards";
 import {
@@ -22,7 +22,7 @@ import {
   WEAPON_TAG_IMG_NAME_MAP,
 } from "./TagIcon";
 import { FilterBar } from "./FilterBar";
-import { CardPool } from "./CardPool";
+import { Key } from "@solid-primitives/keyed";
 import type { DeckDataCharacterInfo } from "@gi-tcg/assets-manager";
 import { useDeckBuilderContext } from "./DeckBuilder";
 
@@ -47,12 +47,10 @@ export function AllCharacterCards(props: AllCardsProps) {
       tags.push(nation);
     }
     return (
+      !props.characterBlacklist?.includes(ch.id) &&
       ch.version <= props.version && tags.every((t) => ch.tags.includes(t))
     );
   };
-  const shownCharacters = createMemo(() => props.characters.values()
-    .filter((ch) => !props.characterBlacklist?.includes(ch.id) && shown(ch))
-    .toArray());
 
   const toggleElementTag = (tag: string | null) => {
     if (elementTag() === tag) {
@@ -83,19 +81,13 @@ export function AllCharacterCards(props: AllCardsProps) {
     return props.deck.characters.length >= 3;
   };
 
-  // 当前版本不包含的角色自动下掉；其天赋牌由行动牌侧的合法性检查连带移除
   createEffect(() => {
     const characters = props.deck.characters;
     const available = characters.filter(
-      (id) =>
-        props.characters.has(id) &&
-        !props.characterBlacklist?.includes(id),
+      (id) => props.characters.has(id) && !props.characterBlacklist?.includes(id),
     );
     if (available.length !== characters.length) {
-      props.onChangeDeck?.({
-        ...props.deck,
-        characters: available,
-      });
+      props.onChangeDeck?.({ ...props.deck, characters: available });
     }
   });
 
@@ -141,10 +133,12 @@ export function AllCharacterCards(props: AllCardsProps) {
           },
         ]}
       />
-      <CardPool cards={shownCharacters()}>
+      <ul class="flex-grow overflow-auto grid grid-cols-[repeat(auto-fill,minmax(60px,1fr))] gap-2 pb-2 @3xl:pb-0 [scrollbar-width:thin]">
+        <Key each={props.characters.values().toArray()} by="id">
           {(ch) => (
             <li
-              class="relative cursor-pointer data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60 data-[disabled]:filter-none hover:brightness-110 transition-all"
+              class="hidden data-[shown]-block relative cursor-pointer data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60 data-[disabled]:filter-none hover:brightness-110 transition-all"
+              bool:data-shown={shown(ch())}
               bool:data-disabled={fullCharacters() && !selected(ch().id)}
               onClick={() => toggleCharacter(ch().id)}
             >
@@ -155,7 +149,8 @@ export function AllCharacterCards(props: AllCardsProps) {
               />
             </li>
           )}
-      </CardPool>
+        </Key>
+      </ul>
     </div>
   );
 }
