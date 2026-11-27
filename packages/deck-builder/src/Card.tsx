@@ -210,12 +210,13 @@ export function TinyActionCard(props: TinyCardProps) {
   const [url] = createResource(() =>
     assetsManager().getImageUrl(props.id, { thumbnail: true }),
   );
+  const name = () => assetsManager().getNameSync(props.id) ?? String(props.id);
 
   return (
     <button
       type="button"
       class="block @3xl:hidden DP:hidden w-full aspect-[7/12] rounded-md overflow-clip b-gray-500 border-2 relative"
-      aria-label={t("viewCardDetails", { name: assetsManager().getNameSync(props.id) ?? props.id })}
+      aria-label={t("viewCardDetails", { name: name() })}
       onClick={(e) => {
         e.stopPropagation();
         showCard(e, "actionCard", props.id);
@@ -223,7 +224,11 @@ export function TinyActionCard(props: TinyCardProps) {
     >
       <Show
         when={url.state === "ready"}
-        fallback={<div class="w-full aspect-ratio-[7/12] bg-gray-200" />}
+        fallback={
+          <span class="grid h-full place-content-center break-all bg-gray-200 px-px text-[9px] leading-tight">
+            {name()}
+          </span>
+        }
       >
         <img alt="" src={url()} draggable="false" class="w-full object-cover" />
       </Show>

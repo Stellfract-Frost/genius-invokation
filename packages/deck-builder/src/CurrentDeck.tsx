@@ -130,7 +130,7 @@ export function CurrentDeck(props: AllCardsProps & { onExpand: () => void }) {
         <For each={current.cards}>
           {(ac, idx) => (
             <li
-              bool:data-preview={ac !== null || idx() < 6}
+              bool:data-preview={ac !== null}
               class="aspect-[7/12] min-w-0"
               onClick={() => ac && removeActionCard(idx())}
             >

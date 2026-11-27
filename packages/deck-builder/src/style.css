@@ -186,15 +186,13 @@
       }
 
       .deck-selection-actions {
-        display: flex;
-        align-items: start;
-        overflow-x: auto;
-        scrollbar-width: thin;
-        overscroll-behavior-inline: contain;
-        padding-bottom: 0.125rem;
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+        gap: 2px;
+        max-width: 30rem;
 
-        > li {
-          flex: 0 0 1.5rem;
+        @media (max-height: 40rem) {
+          grid-template-columns: repeat(15, minmax(0, 1fr));
+          max-width: 25rem;
         }
 
         > li:not([data-preview]) {

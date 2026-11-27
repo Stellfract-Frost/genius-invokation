@@ -44,8 +44,11 @@ export function CardPool<T extends { id: number }>(props: {
       <div ref={viewport} class="flex-1 min-h-0 overflow-auto [scrollbar-width:thin]">
         <Show when={cards().length} fallback={<p class="p-3 text-sm text-gray-600">{t("noMatchingCards")}</p>}>
           <ul
-            class="grid items-start gap-2"
-            style={{ "grid-template-columns": `repeat(${layout().columns}, minmax(0, 1fr))` }}
+            class="items-start gap-2"
+            style={{
+              display: "grid",
+              "grid-template-columns": `repeat(${layout().columns}, minmax(0, 1fr))`,
+            }}
           >
             <Key each={cards()} by="id">{props.children}</Key>
           </ul>

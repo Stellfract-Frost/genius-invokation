@@ -1091,6 +1091,10 @@ export function Chessboard(props: ChessboardProps) {
   );
   /** 正在查看哪一方的弃牌堆（null 表示未打开） */
   const [discardViewer, setDiscardViewer] = createSignal<0 | 1 | null>(null);
+  const viewedDiscard = () => {
+    const who = discardViewer();
+    return who === null ? null : localProps.data.state.player[who]?.discardCard ?? [];
+  };
   // 页面层的弃牌堆按钮（不参与旋转）请求打开列表
   createEffect(() => {
     const request = discardPileRequest();
@@ -2193,65 +2197,6 @@ export function Chessboard(props: ChessboardProps) {
             <CardDataViewer />
           </div>
 
-          <Show when={discardViewer() !== null}>
-            <div
-              class="absolute inset-0 z-100 flex items-center justify-center bg-black/60 p-4"
-              onClick={() => setDiscardViewer(null)}
-            >
-              <div
-                class="max-h-[80%] w-[min(92%,880px)] overflow-auto rounded-xl bg-white p-4 shadow-xl"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div class="mb-3 flex items-center justify-between">
-                  <h3 class="text-lg font-bold">
-                    {t("discardPile")}（
-                    {(localProps.data.state.player[discardViewer()!]?.discardCard ?? [])
-                      .length}
-                    ）
-                  </h3>
-                  <button
-                    class="btn btn-sm btn-outline-primary"
-                    onClick={() => setDiscardViewer(null)}
-                  >
-                    ✕
-                  </button>
-                </div>
-                <Show
-                  when={
-                    (localProps.data.state.player[discardViewer()!]?.discardCard ??
-                      []).length > 0
-                  }
-                  fallback={
-                    <p class="py-8 text-center text-sm text-gray-500">
-                      {t("discardPileEmpty")}
-                    </p>
-                  }
-                >
-                  <div class="grid grid-cols-4 gap-2 sm:grid-cols-6">
-                    <For
-                      each={
-                        localProps.data.state.player[discardViewer()!]
-                          ?.discardCard ?? []
-                      }
-                    >
-                      {(card) => (
-                        <div
-                          class="overflow-hidden rounded border border-gray-300"
-                          title={assetsManager().getNameSync(card.definitionId)}
-                        >
-                          <Image
-                            imageId={card.definitionId}
-                            type="cardFace"
-                            class="w-full"
-                          />
-                        </div>
-                      )}
-                    </For>
-                  </div>
-                </Show>
-              </div>
-            </div>
-          </Show>
           {/* 右上角部件 */}
           <div class="justify-self-end h-8 m-2 flex flex-row-reverse gap-1.5 items-center">
             <Show when={localProps.data.state.phase !== PbPhaseType.GAME_END}>
@@ -2294,6 +2239,63 @@ export function Chessboard(props: ChessboardProps) {
           </div>
         </Show>
       </TransformWrapper>
+      <Show when={viewedDiscard()}>
+        {(cards) => (
+          <div
+            class="discard-pile-overlay"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setDiscardViewer(null);
+              }
+            }}
+          >
+            <section
+              class="discard-pile-panel"
+              role="dialog"
+              aria-label={t("discardPile")}
+            >
+              <header class="mb-3 flex shrink-0 items-center justify-between gap-2">
+                <h3 class="text-lg font-bold">{t("discardPile")}（{cards().length}）</h3>
+                <button
+                  type="button"
+                  class="h-8 rounded-md b-1 px-3 text-sm"
+                  onClick={() => setDiscardViewer(null)}
+                >
+                  {t("discardPileClose")}
+                </button>
+              </header>
+              <div class="discard-pile-scroll touch-pan">
+                <Show
+                  when={cards().length}
+                  fallback={
+                    <p class="py-8 text-center text-sm text-gray-500">
+                      {t("discardPileEmpty")}
+                    </p>
+                  }
+                >
+                  <div class="discard-pile-cards">
+                    <For each={cards()}>
+                      {(card) => (
+                        <div
+                          class="aspect-[7/12] min-w-0 overflow-hidden rounded border border-gray-300"
+                          title={assetsManager().getNameSync(card.definitionId)}
+                        >
+                          <Image
+                            imageId={card.definitionId}
+                            type="cardFace"
+                            fallback="card"
+                            class="h-full w-full text-xs"
+                          />
+                        </div>
+                      )}
+                    </For>
+                  </div>
+                </Show>
+              </div>
+            </section>
+          </div>
+        )}
+      </Show>
     </div>
   );
 }

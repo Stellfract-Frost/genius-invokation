@@ -18,6 +18,7 @@ import type { I18nRawDictionary } from ".";
 export default {
   discardPile: "Discard pile",
   discardPileEmpty: "The discard pile is empty",
+  discardPileClose: "Close",
   reaction: {
     Melt: "Melt",
     Vaporize: "Vaporize",
