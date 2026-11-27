@@ -118,7 +118,6 @@ import {
   RULE_RELATED_DEFINITION_IDS,
   RULE_PLACEHOLDER_SKILL,
   UNDERCURRENT_STACKS,
-  CIRCULATION_DRAW_COUNT,
   CHARACTER_DERIVED_CARD_IDS,
   PLAYED_TO_BASE_ID,
   drawChaosRule,
@@ -561,13 +560,13 @@ export class Game {
     );
   }
 
-  /** 特殊规则「运转」：把未打出的手牌移入弃牌堆（秘传牌留在手上） */
-  private ruleMoveHandsToDiscard(who: 0 | 1) {
+  /** 「运转」在换回合抽牌前将未保留的手牌移入弃牌堆。 */
+  private ruleMoveHandsToDiscard(who: 0 | 1, retainedCardIds: readonly number[]) {
     for (const card of [...this.state.players[who].hands]) {
-      // 秘传牌与衍生牌保留在手上
       if (
         card.definition.tags.includes("legend") ||
-        this.ruleIsDerivedCard(card)
+        this.ruleIsDerivedCard(card) ||
+        retainedCardIds.includes(card.id)
       ) {
         continue;
       }
@@ -1282,6 +1281,20 @@ export class Game {
               break;
             }
             case "declareEnd": {
+              if (hasRule(this.state, "circulation")) {
+                const runtime = getRuleRuntime(this.state);
+                const handCountsAtEnd: [number | null, number | null] = [
+                  ...(runtime.circulation?.handCountsAtEnd ?? [null, null]),
+                ];
+                handCountsAtEnd[who] = player().hands.length;
+                this.mutator.setRuleRuntime({
+                  ...runtime,
+                  circulation: {
+                    handCountsAtEnd,
+                    retainedCardIds: runtime.circulation?.retainedCardIds ?? [],
+                  },
+                });
+              }
               this.mutate({
                 type: "setPlayerFlag",
                 who,
@@ -1337,15 +1350,20 @@ export class Game {
     // 特殊规则「回复」：回合结束双方全体角色回复 1 点生命
     await this.ruleOnRoundEnd();
     // 特殊规则「运转」：未打出的手牌进入弃牌堆（紧跟抽牌之前，不插入其它结算）
-    const circulation = hasRule(this.state, "circulation");
-    if (circulation) {
+    const drawCounts: [number, number] = [2, 2];
+    if (hasRule(this.state, "circulation")) {
+      const { circulation, ...runtime } = getRuleRuntime(this.state);
+      if (circulation) {
+        this.mutator.setRuleRuntime(runtime);
+      }
       for (const who of [0, 1] as const) {
-        this.ruleMoveHandsToDiscard(who);
+        // 兼容从旧回放的结束阶段恢复、尚无宣布结束记录的状态。
+        drawCounts[who] += circulation?.handCountsAtEnd[who] ?? this.state.players[who].hands.length;
+        this.ruleMoveHandsToDiscard(who, circulation?.retainedCardIds ?? []);
       }
     }
-    const drawCount = circulation ? CIRCULATION_DRAW_COUNT : 2;
     for (const who of [this.state.currentTurn, flip(this.state.currentTurn)]) {
-      const { events } = this.mutator.drawCardsPlain(who, drawCount);
+      const { events } = this.mutator.drawCardsPlain(who, drawCounts[who]);
       await this.handleEvents(events);
     }
     await this.handleEvent("onRoundEnd", new EventArg(this.state));

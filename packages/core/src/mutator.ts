@@ -1000,16 +1000,34 @@ export class StateMutator {
     if (
       payload.type === "moveEntity" &&
       payload.reason === "draw" &&
-      payload.from.type === "pile" &&
-      this.state.players[payload.from.who].pile.length === 0
+      payload.from.type === "pile"
     ) {
-      const fromWho = payload.from.who;
-      const circulation = hasRule(this.state, "circulation");
-      if (hasRule(this.state, "overdraw")) {
-        this.applyOverdraw(fromWho, circulation);
+      const isCirculation = hasRule(this.state, "circulation");
+      if (isCirculation && !overflowed) {
+        const runtime = getRuleRuntime(this.state);
+        const circulation = runtime.circulation;
+        if (
+          circulation &&
+          circulation.handCountsAtEnd[who] !== null &&
+          !circulation.retainedCardIds.includes(state.id)
+        ) {
+          this.setRuleRuntime({
+            ...runtime,
+            circulation: {
+              ...circulation,
+              retainedCardIds: [...circulation.retainedCardIds, state.id],
+            },
+          });
+        }
       }
-      if (circulation) {
-        this.reshuffleDiscardIntoPile(fromWho);
+      const fromWho = payload.from.who;
+      if (this.state.players[fromWho].pile.length === 0) {
+        if (hasRule(this.state, "overdraw")) {
+          this.applyOverdraw(fromWho, isCirculation);
+        }
+        if (isCirculation) {
+          this.reshuffleDiscardIntoPile(fromWho);
+        }
       }
     }
     return [

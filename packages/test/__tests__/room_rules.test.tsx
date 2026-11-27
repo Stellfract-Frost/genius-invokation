@@ -5,7 +5,7 @@
 // published by the Free Software Foundation, either version 3 of the
 // License, or (at your option) any later version.
 
-import { ref, setup, Character, State, Card, DiceCount, $ } from "#test";
+import { ref, setup, Character, State, Card, DiceCount, Status, Support, $ } from "#test";
 import { test, expect } from "vitest";
 import {
   Game,
@@ -21,12 +21,14 @@ import {
   CountdownToTheShow2,
   CountdownToTheShow3,
   ForbiddenKnowledge,
+  FriendshipEternal,
 } from "@gi-tcg/data/internal/cards/event/other.gts";
 import {
   LumenstoneAdjuvant,
   Nre,
 } from "@gi-tcg/data/internal/cards/support/item.gts";
 import { Taroumaru, Timaeus } from "@gi-tcg/data/internal/cards/support/ally.gts";
+import { LiyueHarborWharf } from "@gi-tcg/data/internal/cards/support/place.gts";
 import { GamblersEarrings } from "@gi-tcg/data/internal/cards/equipment/artifacts.gts";
 import { Ganyu } from "@gi-tcg/data/internal/characters/cryo/ganyu.gts";
 import {
@@ -37,6 +39,7 @@ import {
 import { MondstadtHashBrown } from "@gi-tcg/data/internal/cards/event/food.gts";
 import { ChangingShifts } from "@gi-tcg/data/internal/cards/event/other.gts";
 import { CurseOfTheUndercurrent } from "@gi-tcg/data/internal/characters/hydro/abyss_herald_wicked_torrents.gts";
+import { FontemerPearl, MillennialPearlSeahorse } from "@gi-tcg/data/internal/characters/electro/millennial_pearl_seahorse.gts";
 
 test("regeneration: 回合结束双方全体回复 1 点生命", async () => {
   const c = setup(
@@ -564,9 +567,70 @@ test("circulation: 回合结束未打出的手牌进入弃牌堆，并洗回牌�
   );
   await c.me.end();
   await c.opp.end();
-  // 2 张手牌进弃牌堆 -> 牌库不足 5 张时洗回 -> 重新抽到手上
+  // X=2，要抓 4 张。弃置的 2 张洗回后重新抽到手上。
   expect(c.state.players[0].discard.length).toBe(0);
   expect(c.state.players[0].hands.length).toBe(2);
+});
+
+test("circulation: 各自锁定 X，结束后抽到的牌保留一次，先弃置再抽牌", async () => {
+  const c = setup(
+    <State config={{ roomRules: ["circulation"] }} children={[
+      <Character my active def={MillennialPearlSeahorse}>
+        <Status def={FontemerPearl} />
+      </Character>,
+      <Character opp active />,
+      <Support my def={LiyueHarborWharf} usage={1} />,
+      <Card my def={CountdownToTheShow3} />,
+      <Card opp def={FriendshipEternal} />,
+      ...Array.from({ length: 12 }, () => <Card my pile def={ChangingShifts} />),
+      ...Array.from({ length: 12 }, () => <Card opp pile def={ChangingShifts} />),
+    ]} />,
+  );
+  const originalCardId = c.state.players[0].hands[0]!.id;
+  const retained = c.state.players[0].pile.slice(0, 5).map((card) => card.id);
+  await c.me.end();
+  expect(c.state.players[0].hands.map((card) => card.id)).toEqual([
+    originalCardId,
+    retained[0],
+  ]);
+  await c.opp.card(FriendshipEternal);
+  const log = serializeGameStateLog([{ state: c.state, canResume: true }]);
+  const [restored] = deserializeGameStateLog(c.state.data, log);
+  expect(getRuleRuntime(restored.state).circulation).toEqual({
+    handCountsAtEnd: [1, null],
+    retainedCardIds: retained.slice(0, 3),
+  });
+
+  await c.opp.end();
+  const [myPlayer, opponent] = c.state.players;
+  expect(myPlayer.hands).toHaveLength(8);
+  expect(myPlayer.hands.slice(0, 5).map((card) => card.id)).toEqual(retained);
+  expect(myPlayer.hands.every((card) => card.definition.id === ChangingShifts)).toBe(true);
+  expect(myPlayer.discard.map((card) => card.definition.id)).toEqual([CountdownToTheShow3]);
+  expect(opponent.hands).toHaveLength(6);
+  expect(getRuleRuntime(c.state).circulation).toBeUndefined();
+
+  await c.me.end();
+  await c.opp.end();
+  expect(c.state.players[0].hands.some((card) => retained.includes(card.id))).toBe(false);
+});
+
+test("circulation: 保留牌与 X+2 抽牌都遵守手牌上限，溢出牌照常移除", async () => {
+  const c = setup(
+    <State config={{ roomRules: ["circulation"], maxHandsCount: 3 }} children={[
+      <Character my active />,
+      <Character opp active />,
+      <Support my def={LiyueHarborWharf} usage={1} />,
+      ...Array.from({ length: 3 }, () => <Card my def={ChangingShifts} />),
+      ...Array.from({ length: 9 }, () => <Card my pile def={MondstadtHashBrown} />),
+    ]} />,
+  );
+  await c.me.end();
+  await c.opp.end();
+  const { hands, pile, discard } = c.state.players[0];
+  expect(hands.map((card) => card.definition.id)).toEqual(Array(3).fill(MondstadtHashBrown));
+  expect(discard.map((card) => card.definition.id)).toEqual(Array(3).fill(ChangingShifts));
+  expect(pile).toHaveLength(2);
 });
 
 test("circulation: 打出的事件牌进入弃牌堆", async () => {
@@ -630,7 +694,7 @@ test("circulation: 衍生牌在回合结束时保留在手上", async () => {
 
 test.each([
   { overdraw: false, knowledgeInHand: 0, knowledgeInPile: 0 },
-  { overdraw: true, knowledgeInHand: 2, knowledgeInPile: 1 },
+  { overdraw: true, knowledgeInHand: 1, knowledgeInPile: 2 },
 ])("circulation: 立即洗回弃牌堆，按需启用透支（$overdraw）", async ({
   overdraw, knowledgeInHand, knowledgeInPile,
 }) => {
@@ -691,12 +755,6 @@ test("overdraw: 第三回合每名玩家首次抽空都生成零张禁忌知识"
       <Character opp active />
       <Card my pile def={MondstadtHashBrown} />
       <Card my pile def={MondstadtHashBrown} />
-      <Card my pile def={MondstadtHashBrown} />
-      <Card my pile def={MondstadtHashBrown} />
-      <Card my pile def={MondstadtHashBrown} />
-      <Card opp pile def={MondstadtHashBrown} />
-      <Card opp pile def={MondstadtHashBrown} />
-      <Card opp pile def={MondstadtHashBrown} />
       <Card opp pile def={MondstadtHashBrown} />
       <Card opp pile def={MondstadtHashBrown} />
     </State>,
@@ -704,7 +762,7 @@ test("overdraw: 第三回合每名玩家首次抽空都生成零张禁忌知识"
   await c.me.end();
   await c.opp.end();
   for (const player of c.state.players) {
-    expect(player.hands).toHaveLength(5);
+    expect(player.hands).toHaveLength(2);
     expect(player.pile).toHaveLength(0);
   }
 });
@@ -835,6 +893,14 @@ test("overdraw: 同一回合逐次增加禁忌知识，双方独立计数并在�
     MondstadtHashBrown,
   ]);
   expect(countKnowledge()).toBe(10);
+  const newKnowledge: Mutation[] = [];
+  c.game.onPause = (_state, batch) => {
+    newKnowledge.push(...batch.filter((mutation) =>
+      mutation.type === "createEntity" && mutation.target.type === "discard" &&
+      mutation.targetIndex === 0 &&
+      mutation.value.definition.id === ForbiddenKnowledge,
+    ));
+  };
   await c.me.end();
   await c.opp.end();
   await c.me.end();
@@ -843,7 +909,7 @@ test("overdraw: 同一回合逐次增加禁忌知识，双方独立计数并在�
     roundNumber: 4,
     counts: [1, 1],
   });
-  expect(countKnowledge()).toBe(10);
+  expect(newKnowledge).toHaveLength(0);
 });
 
 test("circulation: 指定类别抽牌也会先从弃牌堆补空牌库", async () => {

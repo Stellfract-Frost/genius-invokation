@@ -180,7 +180,7 @@ export default {
     "Each round activates a random boon that can take effect during play. Each boon appears once per cycle. Chaos is used on its own.",
   rule_circulation_name: "Circulation",
   rule_circulation_desc:
-    "Requires a Circulation deck with 24 action cards. At round end, keep Legend and character-generated cards in hand, discard the remaining hand cards, then draw 5. When a deck runs out, immediately shuffle its discard pile back into it.",
+    "Requires a Circulation deck with 24 action cards. When you declare end, record your hand size as X. Cards you draw later that round stay in your hand for the next round. At the round transition, keep those cards, Legend cards, and character-generated cards in hand. Put the remaining hand cards into the discard pile, then draw X + 2 cards. When your deck runs out, immediately shuffle its discard pile back into it.",
   rule_chaos_name: "Chaos",
   rule_chaos_desc:
     "Each round activates a random boon that can take effect during play. Each boon appears once per cycle.",

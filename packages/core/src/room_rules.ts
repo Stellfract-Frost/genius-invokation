@@ -38,7 +38,7 @@ import { DEFAULT_VERSION_INFO } from "./base/version";
 export type RoomRuleId =
   /** 混沌：每回合随机一个正面规则，不重复，抽完重开一轮 */
   | "chaos"
-  /** 运转：回合结束弃牌后抽 5 张，抽空牌库时洗回弃牌堆 */
+  /** 运转：宣布结束时记录手牌数，换回合先弃置再按记录抽牌 */
   | "circulation"
   /** 抽牌：对局开始时手牌 7 张 */
   | "extraDraw"
@@ -79,7 +79,7 @@ export const ROOM_RULES: readonly RoomRuleMeta[] = [
     id: "circulation",
     name: "运转",
     description:
-      "须使用 24 张行动牌的运转牌组。回合结束时，秘传牌和角色衍生牌留在手中，其余手牌进入弃牌堆，然后抽 5 张。抽空牌库时，立即将弃牌堆洗回牌库。",
+      "须使用 24 张行动牌的运转牌组。每名玩家宣布结束时记录自己的手牌数 X，本回合随后抽到的牌保留到下一回合。换回合时，秘传牌、角色衍生牌和保留的牌留在手中，其余手牌进入弃牌堆，然后各自抽 X+2 张。抽空牌库时立即将弃牌堆洗回牌库。",
     polarity: "special",
   },
   {
@@ -222,9 +222,6 @@ export const PLAYED_TO_BASE_ID: Readonly<Record<number, number>> = {
   332035: 332032, // 幻戏开始！（0 费）→ 回炉为 3 费
 };
 
-/** 「运转」每回合的抽牌数 */
-export const CIRCULATION_DRAW_COUNT = 5;
-
 /** 暗流每回合给予的「暗流的诅咒」层数 */
 export const UNDERCURRENT_STACKS = 2;
 
@@ -256,6 +253,11 @@ export interface RoomRuleRuntimeState {
    * 下标 0/1 对应玩家，回合开始时清空，双方互不影响。
    */
   readonly usedSkills: readonly [readonly number[], readonly number[]];
+  /** 「运转」在宣布结束时锁定手牌数，并记录随后抽到的手牌。 */
+  readonly circulation?: {
+    readonly handCountsAtEnd: readonly [number | null, number | null];
+    readonly retainedCardIds: readonly number[];
+  };
   /** 「透支」中同一回合双方各自抽空牌库的次数。 */
   readonly pileDepletions?: {
     readonly roundNumber: number;
