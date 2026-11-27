@@ -162,7 +162,7 @@ export default function Home() {
                 </h2>
               </div>
               <div class="flex flex-grow flex-col-reverse md:flex-row gap-8 md:gap-0 min-h-0">
-                <div class="h-full w-full md:w-128 flex flex-col items-start md:bottom-opacity-gradient">
+                <div class="h-full w-full md:w-128 flex flex-col items-start">
                   <div class="flex flex-wrap gap-2 justify-between mb-3 w-full md:pr-6 items-center">
                     <A href="/decks" class="text-xl font-bold">
                       {t("myDecks")}

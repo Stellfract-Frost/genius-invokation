@@ -135,7 +135,9 @@ export function DeckBriefInfo(props: DeckInfoProps) {
         >
           {circulation() ? t("rule_circulation_name") : t("standardMode")}
         </span>
-        <span class="break-words text-slate-600 tabular-nums">{versionText()}</span>
+        <span class="min-w-0 max-w-full break-words rounded bg-indigo-50 px-1.5 py-0.5 font-medium text-indigo-900 tabular-nums">
+          {t("deckVersionShort")} · {versionText()}
+        </span>
       </div>
       <div class="p-1 md:p-2 flex flex-row items-center justify-around">
         <For each={props.characters}>{(id) => <CharacterAvatar id={id} />}</For>
