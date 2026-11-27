@@ -14,23 +14,13 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import { Hono } from "hono";
-import type { Version } from "@gi-tcg/core";
 import { profilesService } from "../services";
 
 export const ProfilesController = new Hono()
   .get("/", (c) => c.json(profilesService.list()))
-  // 练习模式：把多选的版本合成一个临时 profile（不落库，进程内幂等）
   .post("/merge", async (c) => {
-    const body = (await c.req.json().catch(() => null)) as {
-      versions?: string[];
-      versionMap?: Record<string, string>;
-    } | null;
-    const versions = (body?.versions ?? []) as Version[];
-    const versionMap: Record<number, Version> = {};
-    for (const [id, version] of Object.entries(body?.versionMap ?? {})) {
-      versionMap[Number(id)] = version as Version;
-    }
-    const compiled = profilesService.createMerged(versions, versionMap);
+    const body = await c.req.json<{ versions?: unknown }>().catch(() => null);
+    const compiled = profilesService.resolveVersionSelection(body?.versions);
     return c.json(compiled.summary, 201);
   })
   .get("/:id", (c) => {

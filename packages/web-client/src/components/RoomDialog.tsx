@@ -26,6 +26,7 @@ import {
 } from "solid-js";
 import { makePersisted } from "@solid-primitives/storage";
 import {
+  COMPETITION_PROFILE_ID,
   ROOM_RULES,
   getRoomDeckCardCount,
   type RoomRuleId,
@@ -40,7 +41,7 @@ import { useAuth } from "../auth";
 import { useGuestDecks, useGuestInfo } from "../guest";
 import type { ProfileList, ProfileSummary } from "../profiles";
 import { useI18n } from "../i18n";
-import { getDeckVersionKey, getDeckVersions } from "../deckVersions";
+import { getDeckVersionKey } from "../deckVersions";
 
 function SelectableDeckInfo(
   props: Pick<DeckInfoProps, "characters" | "name"> &
@@ -88,7 +89,6 @@ function SelectableDeckInfo(
 export interface RoomDialogProps {
   ref: HTMLDialogElement;
   settingsOnly?: boolean;
-  hostDecks?: readonly DeckInfoProps[];
   joiningRoomInfo?: {
     id: number;
     config: TimeConfig & {
@@ -164,8 +164,6 @@ const TIME_CONFIGS: TimeConfig[] = [
 
 type RoomMode = "standard" | "circulation" | "chaos";
 
-const MIXED_VERSION_PREFIX = "deck-versions:";
-
 const DEFAULT_ROOM_SETTINGS = {
   version: "",
   time: 1,
@@ -201,7 +199,13 @@ export function RoomDialog(props: RoomDialogProps) {
       return "";
     }
   })();
-  const [roomVersion, setRoomVersion] = createSignal(defaults().version || legacyProfile);
+  const savedRoomVersion = () => {
+    const id = defaults().version || legacyProfile;
+    return id.startsWith("deck-versions:") || id.startsWith("practice/")
+      ? COMPETITION_PROFILE_ID
+      : id;
+  };
+  const [roomVersion, setRoomVersion] = createSignal(savedRoomVersion());
   const [timeConfig, setTimeConfig] = createSignal(TIME_CONFIGS[defaults().time] ?? TIME_CONFIGS[1]);
   const [isPublic, setIsPublic] = createSignal(defaults().isPublic);
   const [watchable, setWatchable] = createSignal(defaults().watchable);
@@ -217,37 +221,16 @@ export function RoomDialog(props: RoomDialogProps) {
     const effects = roomRules().filter((rule) => rule !== "chaos" && rule !== "circulation");
     setRoomRules(mode === "chaos" ? ["chaos"] : mode === "circulation" ? ["circulation", ...effects] : effects);
   };
-  const mixedVersionOptions = createMemo(() => {
-    const versionKeys = new Set((props.hostDecks ?? [])
-      .map((deck) => getDeckVersionKey(deck.versions))
-      .filter((key) => key.includes("+")));
-    if (roomVersion().startsWith(MIXED_VERSION_PREFIX)) {
-      versionKeys.add(roomVersion().slice(MIXED_VERSION_PREFIX.length));
-    }
-    return [...versionKeys].sort();
-  });
-  const mixedVersionKey = () => editable() && roomVersion().startsWith(MIXED_VERSION_PREFIX)
-    ? roomVersion().slice(MIXED_VERSION_PREFIX.length)
-    : "";
-  const [mergedProfile, { refetch: retryMergedProfile }] = createResource(
-    () => editable() && !props.settingsOnly && mixedVersionKey(),
-    (key) => axios.post<ProfileSummary>("profiles/merge", { versions: key.split("+") }).then(({ data }) => data),
-  );
   const profile = createMemo(() => {
     if (props.joiningRoomInfo) {
       return props.joiningRoomInfo.config.profile;
-    }
-    if (mixedVersionKey()) {
-      return mergedProfile.state === "ready" ? mergedProfile() : undefined;
     }
     const list = profiles();
     return list?.profiles.find((profile) => profile.id === roomVersion())
       ?? list?.profiles.find((profile) => profile.id === list.defaultProfileId);
   });
-  const profileOptions = createMemo(() => profiles()?.profiles
-    .filter((option) => !option.id.startsWith("practice/") || !option.id.includes("#"))
-    .toReversed() ?? []);
-  const selectedVersionOption = () => mixedVersionKey() ? roomVersion() : profile()?.id ?? roomVersion();
+  const profileOptions = createMemo(() => profiles()?.profiles.toReversed() ?? []);
+  const selectedVersionOption = () => profile()?.id ?? roomVersion();
   const [availableDecks, setAvailableDecks] = createSignal<DeckInfoProps[]>([]);
   const matchingDecks = createMemo(() => availableDecks().filter((deck) => {
     if (deck.cards.length !== deckSize()) {
@@ -257,12 +240,9 @@ export function RoomDialog(props: RoomDialogProps) {
       return true;
     }
     const key = getDeckVersionKey(deck.versions);
-    if (mixedVersionKey()) {
-      return key === mixedVersionKey();
-    }
     const selected = profile();
     if (key) {
-      return key === selected?.baseVersion;
+      return selected?.id === (key === COMPETITION_PROFILE_ID ? key : `official/${key}`);
     }
     return selected?.id === profiles()?.defaultProfileId || selected?.id.startsWith("official/") === false;
   }));
@@ -283,7 +263,7 @@ export function RoomDialog(props: RoomDialogProps) {
   const resetRoomSettings = () => {
     if (editable()) {
       const saved = defaults();
-      setRoomVersion(saved.version || legacyProfile);
+      setRoomVersion(savedRoomVersion());
       setTimeConfig(TIME_CONFIGS[saved.time] ?? TIME_CONFIGS[1]);
       setIsPublic(saved.isPublic);
       setWatchable(saved.watchable);
@@ -384,9 +364,8 @@ export function RoomDialog(props: RoomDialogProps) {
       let playerId = id ?? null;
       let response;
       if (typeof roomId === "undefined") {
-        const profileId = mixedVersionKey() ? undefined : currentProfile.id;
         const payload: any = {
-          profileId,
+          profileId: currentProfile.id,
           ...timeConfig(),
           private: !isPublic(),
           watchable: watchable(),
@@ -466,22 +445,14 @@ export function RoomDialog(props: RoomDialogProps) {
                   <>
                     <For each={profileOptions()}>
                       {(option) => (
-                        <option value={option.id} selected={option.id === selectedVersionOption()}>{option.name}</option>
-                      )}
-                    </For>
-                    <For each={mixedVersionOptions()}>
-                      {(key) => (
-                        <option
-                          value={MIXED_VERSION_PREFIX + key}
-                          selected={MIXED_VERSION_PREFIX + key === selectedVersionOption()}
-                        >
-                          {key.replaceAll("+", " / ")}
+                        <option value={option.id} selected={option.id === selectedVersionOption()}>
+                          {option.id === COMPETITION_PROFILE_ID ? t("competitionVersion") : option.name}
                         </option>
                       )}
                     </For>
                   </>
                 }>
-                  <option value={profile()?.id}>{profile()?.name}</option>
+                  <option value={profile()?.id}>{profile()?.id === COMPETITION_PROFILE_ID ? t("competitionVersion") : profile()?.name}</option>
                 </Show>
               </select>
             </label>
@@ -505,13 +476,6 @@ export function RoomDialog(props: RoomDialogProps) {
           <Show when={!props.settingsOnly}>
             <section class="min-w-0 md:col-start-2 md:row-start-1 md:row-span-2">
               <h4 class="text-base font-semibold mb-2">{t("chooseDeck")}</h4>
-              <Show when={mixedVersionKey() && mergedProfile.error}>
-                <p role="alert" class="text-sm text-red-700">
-                  {t("deckVersionLoadFailed")}
-                  <button type="button" class="ml-2 underline" onClick={() => void retryMergedProfile()}>{t("retry")}</button>
-                </p>
-              </Show>
-              <Show when={!(mixedVersionKey() && mergedProfile.error)}>
                 <Show when={profile() && !loadingDecks()} fallback={<p role="status" class="text-sm text-slate-600">{t("loading")}</p>}>
                 <ul class="grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-2 max-h-65dvh overflow-auto p-1">
                   <For each={matchingDecks()} fallback={
@@ -531,7 +495,6 @@ export function RoomDialog(props: RoomDialogProps) {
                     )}
                   </For>
                 </ul>
-                </Show>
               </Show>
             </section>
           </Show>

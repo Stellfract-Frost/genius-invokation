@@ -60,6 +60,7 @@ export const VERSIONS = [
 ] as const;
 
 export type Version = (typeof VERSIONS)[number];
+export const COMPETITION_PROFILE_ID = "competition";
 
 export const INIT_VERSION = VERSIONS[0];
 

@@ -21,15 +21,10 @@ import {
   Show,
   For,
   createEffect,
-  onCleanup,
   type Accessor,
 } from "solid-js";
-import { VERSIONS } from "@gi-tcg/core";
-import {
-  fetchProfile,
-  type ProfileDetail,
-  type ProfileSummary,
-} from "../profiles";
+import { COMPETITION_PROFILE_ID, VERSIONS } from "@gi-tcg/core";
+import type { ProfileDetail } from "../profiles";
 import { Layout } from "../layouts/Layout";
 import axios, { AxiosError } from "axios";
 import {
@@ -50,7 +45,7 @@ import { unwrap } from "solid-js/store";
 import { copyShareCode, getErrorMessage } from "../utils";
 import { useI18n } from "../i18n";
 import { TextFieldEdit } from "../components/TextFieldEdit";
-import { getDeckVersions } from "../deckVersions";
+import { getDeckVersionKey, getDeckVersions } from "../deckVersions";
 
 function VersionOptions(props: {
   versions: Accessor<readonly string[]>;
@@ -96,9 +91,19 @@ export default function EditDeck() {
   );
   const [previewVersions, setPreviewVersions] = createSignal<string[]>([]);
   const [draftVersions, setDraftVersions] = createSignal<string[]>([]);
-  const [previewSingle, setPreviewSingle] = createSignal<string | null>(null);
-  const [previewDetail, setPreviewDetail] = createSignal<ProfileDetail | null>(null);
-  const [previewState, setPreviewState] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
+  const previewVersion = () => getDeckVersionKey(previewVersions());
+  const isCompetition = () => previewVersion() === COMPETITION_PROFILE_ID;
+  const [competition, { refetch: retryCompetition }] = createResource(
+    isCompetition,
+    () => axios.get<ProfileDetail>(`profiles/${COMPETITION_PROFILE_ID}`).then(({ data }) => data),
+  );
+  const previewState = () => {
+    if (!isCompetition() || competition.state === "ready") {
+      return "ready";
+    }
+    return competition.state === "errored" ? "error" : "loading";
+  };
+  const previewDetail = () => isCompetition() && competition.state === "ready" ? competition() : undefined;
   let versionDialog!: HTMLDialogElement;
   let leaveDialog!: HTMLDialogElement;
   const [uploading, setUploading] = createSignal(false);
@@ -118,49 +123,6 @@ export default function EditDeck() {
     () => axios.get<DeckInfo>(`decks/${deckId}`).then((r) => r.data),
   );
   let deckLoaded = false;
-
-  createEffect(() => {
-    const vs = previewVersions();
-    if (vs.length === 0) {
-      setPreviewSingle(null);
-      setPreviewDetail(null);
-      setPreviewState("idle");
-      return;
-    }
-    // 单选 = 普通（直接用该版本的数据）；多选 = 比赛版本（合并卡池）
-    if (vs.length === 1) {
-      setPreviewDetail(null);
-      setPreviewSingle(vs[0]);
-      setPreviewState("ready");
-      return;
-    }
-    setPreviewSingle(null);
-    setPreviewState("loading");
-    const request = new AbortController();
-    const timer = setTimeout(async () => {
-      try {
-        const { data } = await axios.post<ProfileSummary>(
-          "profiles/merge",
-          { versions: vs },
-          { signal: request.signal },
-        );
-        const detail = await fetchProfile(data);
-        if (request.signal.aborted) {
-          return;
-        }
-        setPreviewDetail(detail);
-        setPreviewState("ready");
-      } catch {
-        if (!request.signal.aborted) {
-          setPreviewState("error");
-        }
-      }
-    }, 400);
-    onCleanup(() => {
-      clearTimeout(timer);
-      request.abort();
-    });
-  });
 
   createEffect(() => {
     if (isNew || deckLoaded) {
@@ -314,9 +276,9 @@ export default function EditDeck() {
     }
   };
 
-  const selectedVersions = () => previewVersions().length
-    ? previewVersions().join(" / ")
-    : t("deckVersionDefault");
+  const selectedVersions = () => isCompetition()
+    ? t("competitionVersion")
+    : previewVersion() || t("deckVersionDefault");
 
   return (
     <Layout fitViewport>
@@ -416,14 +378,14 @@ export default function EditDeck() {
           </Match>
           <Match when={previewState() === "error"}>
             {t("deckVersionLoadFailed")}
-            <button type="button" class="ml-2 underline" onClick={() => setPreviewVersions([...previewVersions()])}>
+            <button type="button" class="ml-2 underline" onClick={() => void retryCompetition()}>
               {t("retry")}
             </button>
           </Match>
           <Match when={status().type !== "notLogin"}>
             <DeckBuilder
               class="w-full min-h-0 flex-1"
-              assetsManager={assetsManager(previewDetail() ?? previewSingle() ?? undefined)}
+              assetsManager={assetsManager(previewDetail() ?? (previewVersion() || undefined))}
               hideVersionSelect
               characterBlacklist={previewDetail()?.deck?.blacklist}
               locale={locale()}

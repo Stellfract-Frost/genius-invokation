@@ -323,7 +323,7 @@ export default function Home() {
         </Switch>
       </div>
       <Portal>
-        <RoomDialog ref={createRoomDialogEl!} settingsOnly={settingsOnly()} hostDecks={decks().data} />
+        <RoomDialog ref={createRoomDialogEl!} settingsOnly={settingsOnly()} />
         <RoomDialog
           ref={joinRoomDialogEl!}
           joiningRoomInfo={joiningRoomInfo()}

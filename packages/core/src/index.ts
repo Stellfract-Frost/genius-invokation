@@ -57,6 +57,7 @@ export {
   type OfficialVersionResolver,
   VERSIONS,
   CURRENT_VERSION,
+  COMPETITION_PROFILE_ID,
   createOfficialVersionResolver,
 } from "./base/version";
 export * from "./query";

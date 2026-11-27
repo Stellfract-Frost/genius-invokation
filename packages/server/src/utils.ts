@@ -26,13 +26,13 @@ import {
   type EntityRawData,
 } from "@gi-tcg/assets-manager";
 import { type } from "arktype";
-import { CURRENT_VERSION, VERSIONS, type Version } from "@gi-tcg/core";
+import { COMPETITION_PROFILE_ID, CURRENT_VERSION, VERSIONS, type Version } from "@gi-tcg/core";
 import { compare as semverCompare } from "semver";
 import { createId as createCuid, isCuid } from "@paralleldrive/cuid2";
 import { BadRequestException } from "./errors";
 import type { CompiledProfile } from "./profiles/types";
 import { decks } from "./db/schema";
-import { and, lte, or, sql } from "drizzle-orm";
+import { and, lte, sql } from "drizzle-orm";
 
 export enum DeckVerificationErrorCode {
   SizeError = "SizeError",
@@ -172,14 +172,18 @@ export async function verifyDeckForProfile(
     );
   }
   const version = await verifyDeck(deck);
+  const { id, baseVersion } = profile.profile;
   const { whitelist, blacklist, allowNewerCards } = profile.profile.deck ?? {};
-  // 多版本卡组（作者声明兼容多个版本）不受目标规则配置的版本上限限制；
-  // 只有单版本卡组才需要检查它所需的最低版本是否高于当前配置
-  const isMultiVersion = (deck.versions ?? []).length > 1;
+  const explicitVersions = VERSIONS.filter((version) => deck.versions?.includes(version));
+  if (explicitVersions.length > 1 && id !== COMPETITION_PROFILE_ID) {
+    throw new DeckVerificationError(
+      DeckVerificationErrorCode.VersionError,
+      "Multi-version decks require the competition profile",
+    );
+  }
   if (
     !allowNewerCards &&
-    !isMultiVersion &&
-    semverCompare(version, profile.profile.baseVersion) > 0
+    semverCompare(version, baseVersion) > 0
   ) {
     throw new DeckVerificationError(
       DeckVerificationErrorCode.VersionError,
@@ -203,17 +207,17 @@ export async function verifyDeckForProfile(
 
 export function buildDeckMatchesProfileDbFilter(profile: CompiledProfile) {
   const {
+    id,
     baseVersion,
     deck: { whitelist, blacklist, allowNewerCards } = {},
   } = profile.profile;
   return and(
+    id === COMPETITION_PROFILE_ID
+      ? void 0
+      : sql`(select count(distinct version) from jsonb_array_elements_text(${decks.versions}) as available(version) where ${JSON.stringify(VERSIONS)}::jsonb ? version) < 2`,
     allowNewerCards
       ? void 0
-      : or(
-          lte(decks.requiredVersion, VERSIONS.indexOf(baseVersion)),
-          // 多版本卡组在任意规则配置下都可用（与 verifyDeckForProfile 保持一致）
-          sql`${decks.versions} is not null and jsonb_array_length(${decks.versions}) > 1`,
-        ),
+      : lte(decks.requiredVersion, VERSIONS.indexOf(baseVersion)),
     whitelist
       ? sql`(${decks.characters} || ${decks.cards}) <@ ${JSON.stringify(whitelist)}::jsonb`
       : void 0,

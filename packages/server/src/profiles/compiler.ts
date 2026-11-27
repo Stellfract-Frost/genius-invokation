@@ -124,10 +124,8 @@ export function officialProfile(baseVersion: Version): CompiledProfile {
 }
 
 /**
- * 练习用自定义 profile：指定基础版本 + 逐实体版本映射。
- * 用途：赛前练牌时"多选版本"，把若干版本合成一个卡池。
- * baseVersion 决定对局规则，versionMap 决定角色及技能的选版。
- * 行动牌使用赛事配置，角色池由 deck 黑名单限制。
+ * 编译比赛配置。baseVersion 决定对局规则，versionMap 决定角色及技能的选版。
+ * 行动牌和专属依赖沿用赛事配置。
  */
 export function customProfile(
   baseVersion: Version,
@@ -137,10 +135,7 @@ export function customProfile(
     versionMap?: Record<number, Version>;
     fieldOverrides?: Record<number, { hp?: number; maxEnergy?: number }>;
     deck?: ProfileDeckConfig;
-    /**
-     * 行动牌的数据来源（赛事配置的编译产物）。
-     * 多版本即比赛版本：手牌一律用赛事那份数据，角色仍按所选版本。
-     */
+    /** 行动牌的数据来源。 */
     cardDataFrom: CompiledPreset;
   },
 ): CompiledProfile {
@@ -189,7 +184,7 @@ export function customProfile(
   );
   if (resolver.log.conflicts.length > 0) {
     console.warn(
-      `[practice] ${options.id} 依赖冲突 ${resolver.log.conflicts.length} 处（已按旧版本保留）`,
+      `[profile] ${options.id} 依赖冲突 ${resolver.log.conflicts.length} 处（已按旧版本保留）`,
     );
   }
   const data = source.resolveData(resolver);

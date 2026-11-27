@@ -817,10 +817,10 @@ export class RoomsService {
     const hostVersions = VERSIONS.filter((version) =>
       playerInfo.deck.versions?.includes(version),
     );
-    // Saved deck versions define the combined rules for both players.
+    // An explicit deck version selects the official or shared competition profile.
     const compiledProfile =
-      hostVersions.length > 1
-        ? profilesService.createMerged(hostVersions)
+      hostVersions.length > 0
+        ? profilesService.resolveVersionSelection(hostVersions)
         : profilesService.get(params.profileId);
     const roomRules = (params.roomRules ?? []).filter(isRoomRuleId);
     const roomConfig: CreateRoomConfig = {

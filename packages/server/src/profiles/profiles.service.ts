@@ -14,8 +14,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import console from "node:console";
-import { createHash } from "node:crypto";
-import { CURRENT_VERSION, VERSIONS } from "@gi-tcg/core";
+import { COMPETITION_PROFILE_ID, CURRENT_VERSION, VERSIONS } from "@gi-tcg/core";
 import type { Version } from "@gi-tcg/core";
 import { customProfile, loadPresets, officialProfile } from "./compiler";
 import type { CompiledPreset, CompiledProfile } from "./types";
@@ -56,22 +55,24 @@ function skillAt(id: number, idx: number): [string, number] | null {
 export class ProfilesService {
   readonly defaultProfileId = `official/${CURRENT_VERSION}`;
   private profiles = new Map<string, CompiledProfile>();
-  private practiceCardSource?: CompiledPreset;
 
   async onModuleInit() {
     for (const version of VERSIONS) {
       const compiled = officialProfile(version);
       this.profiles.set(compiled.profile.id, compiled);
     }
-    for (const compiled of await loadPresets(
+    const presets = await loadPresets(
       new URL("../../presets/", import.meta.url),
       { recursive: true },
-    )) {
+    );
+    for (const compiled of presets) {
       this.profiles.set(compiled.profile.id, compiled);
-      if (compiled.profile.id === "piovium/lianyu-live") {
-        this.practiceCardSource = compiled;
-      }
     }
+    const cardSource = presets.find(({ profile }) => profile.id === "piovium/lianyu-live");
+    if (!cardSource) {
+      throw new Error("Missing piovium/lianyu-live preset");
+    }
+    this.profiles.set(COMPETITION_PROFILE_ID, this.compileCompetition(cardSource));
   }
 
   get(id = this.defaultProfileId) {
@@ -341,14 +342,8 @@ export class ProfilesService {
     return map;
   }
 
-  /**
-   * 练习用：把若干版本合成一个 profile（幂等，进程重启后失效）。
-   * baseVersion 取池内最高版本；versionMap 默认按规则自动生成。
-   */
-  createMerged(
-    versions: Version[],
-    versionMap?: Record<number, Version>,
-  ): CompiledProfile {
+  /** 兼容旧客户端的多选请求，所有多选共用比赛配置。 */
+  resolveVersionSelection(versions: unknown) {
     if (!Array.isArray(versions) || versions.length === 0) {
       throw new BadRequestException("versions must be a non-empty array");
     }
@@ -356,46 +351,14 @@ export class ProfilesService {
     if (unknown.length > 0) {
       throw new BadRequestException(`unknown versions: ${unknown.join(", ")}`);
     }
-    const sorted = [...new Set(versions)].sort(
-      (a, b) => VERSIONS.indexOf(a as never) - VERSIONS.indexOf(b as never),
-    );
-    const baseVersion = sorted[sorted.length - 1]!;
-    const selectedMaxIdx = VERSION_LIST.indexOf(baseVersion as never);
-    // 角色只允许抽到的版本为止；行动牌沿用恋雨杯 Live 的牌池。
-    const characterBlacklist = Object.keys(CHAR_BODY)
-      .map(Number)
-      .filter((id) => CHAR_BODY[id]![0]![0] > selectedMaxIdx);
-    const name = "比赛版本";
-    const overrides = this.fieldOverrides(sorted);
-    const cardDataFrom = this.practiceCardSource;
-    if (!cardDataFrom) {
-      throw new Error("Missing piovium/lianyu-live preset");
-    }
-    const build = (vm: Record<number, Version>) => {
-      const pinTag = createHash("sha256")
-        .update(JSON.stringify(vm))
-        .digest("hex")
-        .slice(0, 16);
-      const id = `practice/${sorted.join("-")}#${pinTag}`;
-      const cached = this.profiles.get(id);
-      if (cached) {
-        return cached;
-      }
-      return customProfile(baseVersion, {
-        id,
-        name,
-        versionMap: vm,
-        fieldOverrides: overrides,
-        cardDataFrom,
-        deck: {
-          blacklist: characterBlacklist,
-          allowNewerCards: true,
-        },
-      });
-    };
+    return this.get(new Set(versions).size > 1 ? COMPETITION_PROFILE_ID : `official/${versions[0]}`);
+  }
 
+  private compileCompetition(cardDataFrom: CompiledPreset): CompiledProfile {
+    const sorted = [...VERSIONS];
+    const overrides = this.fieldOverrides(sorted);
     const levels: { name: string; vm: () => Record<number, Version> }[] = [
-      { name: "细粒度(本体+技能+行动牌)", vm: () => (versionMap && Object.keys(versionMap).length > 0 ? versionMap : this.autoVersionMap(sorted)) },
+      { name: "细粒度(本体+技能+行动牌)", vm: () => this.autoVersionMap(sorted) },
       { name: "整角色+恋雨杯技能+行动牌", vm: () => this.coarseVersionMap(sorted) },
       { name: "整角色+行动牌", vm: () => this.coarseVersionMap(sorted, false) },
       { name: "不钉版本(纯 base)", vm: () => ({}) },
@@ -404,15 +367,22 @@ export class ProfilesService {
     let lastErr: unknown = null;
     for (const level of levels) {
       try {
-        compiled = build(level.vm());
+        compiled = customProfile(CURRENT_VERSION, {
+          id: COMPETITION_PROFILE_ID,
+          name: "比赛版本",
+          versionMap: level.vm(),
+          fieldOverrides: overrides,
+          cardDataFrom,
+          deck: { allowNewerCards: true },
+        });
         if (level !== levels[0]) {
-          console.warn(`[practice] ${sorted.join("+")} 降级为「${level.name}」`);
+          console.warn(`[competition] 降级为「${level.name}」`);
         }
         break;
       } catch (err) {
         lastErr = err;
         console.warn(
-          `[practice] ${sorted.join("+")} 「${level.name}」冲突：`,
+          `[competition] 「${level.name}」冲突：`,
           (err as Error).message?.split("\n")[0],
         );
       }
@@ -420,18 +390,13 @@ export class ProfilesService {
     if (!compiled) {
       throw lastErr instanceof Error ? lastErr : new Error("profile build failed");
     }
-    this.profiles.set(compiled.profile.id, compiled);
     return compiled;
   }
 
   list() {
-    const all = [...this.profiles.values()];
-    // 全部列出。practice/* 是按版本池即时生成的比赛配置，此前这里只保留
-    // 最后一个，导致换个版本池之后上一份就“消失”，无法再选回。
-    // 现在按创建顺序全部返回（新的在后），默认选中的仍是官方最新版。
     return {
       defaultProfileId: this.defaultProfileId,
-      profiles: all.map(({ summary }) => summary),
+      profiles: [...this.profiles.values()].map(({ summary }) => summary),
     };
   }
 }
